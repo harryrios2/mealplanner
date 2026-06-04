@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+mealplanner.db
+backups/
+*:Zone.Identifier
+{static
