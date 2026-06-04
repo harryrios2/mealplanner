@@ -20,6 +20,7 @@ def backup_db():
 def get_db():
     conn = sqlite3.connect(DB)
     conn.row_factory = sqlite3.Row
+    conn.execute('PRAGMA foreign_keys = ON')
     return conn
 
 SEED_INGREDIENTS = [
@@ -135,7 +136,15 @@ def init_db():
                 )
         db.commit()
 
+def migrate_db():
+    with get_db() as db:
+        cols = {r[1] for r in db.execute('PRAGMA table_info(ingredients)').fetchall()}
+        if 'ingredient_def_id' not in cols:
+            db.execute('ALTER TABLE ingredients ADD COLUMN ingredient_def_id INTEGER REFERENCES ingredient_defs(id) ON DELETE SET NULL')
+            db.commit()
+
 init_db()
+migrate_db()
 backup_db()
 
 # ── Recipes ──────────────────────────────────────────────────────────────────
@@ -158,7 +167,7 @@ def create_recipe():
     db = get_db()
     cur = db.execute(
         'INSERT INTO recipes (name, base_servings, tags, notes) VALUES (?,?,?,?)',
-        (data['name'], data.get('base_servings', 4), data.get('tags', ''), data.get('notes', ''))
+        (data['name'], max(1, int(data.get('base_servings', 4))), data.get('tags', ''), data.get('notes', ''))
     )
     recipe_id = cur.lastrowid
     for ing in data.get('ingredients', []):
@@ -176,7 +185,7 @@ def update_recipe(rid):
     db = get_db()
     db.execute(
         'UPDATE recipes SET name=?, base_servings=?, tags=?, notes=? WHERE id=?',
-        (data['name'], data.get('base_servings', 4), data.get('tags', ''), data.get('notes', ''), rid)
+        (data['name'], max(1, int(data.get('base_servings', 4))), data.get('tags', ''), data.get('notes', ''), rid)
     )
     db.execute('DELETE FROM ingredients WHERE recipe_id = ?', (rid,))
     for ing in data.get('ingredients', []):
@@ -218,10 +227,12 @@ def create_ingredient_def():
 def update_ingredient_def(did):
     data = request.json
     db = get_db()
-    db.execute(
+    result = db.execute(
         'UPDATE ingredient_defs SET name=?, calories_per_100g=?, protein_per_100g=?, carbs_per_100g=?, fat_per_100g=? WHERE id=?',
         (data['name'], data.get('calories', 0), data.get('protein', 0), data.get('carbs', 0), data.get('fat', 0), did)
     )
+    if result.rowcount == 0:
+        return jsonify({'error': 'Not found'}), 404
     db.commit()
     return jsonify({'ok': True})
 
@@ -296,7 +307,7 @@ def get_grocery(week_start):
         grams = row['grams_per_base_serving'] * scale
         key = row['name'].strip().lower()
         if key not in totals:
-            totals[key] = {'grams': 0, 'calories': 0, 'protein': 0, 'carbs': 0, 'fat': 0, 'has_macros': False}
+            totals[key] = {'name': row['name'].strip(), 'grams': 0, 'calories': 0, 'protein': 0, 'carbs': 0, 'fat': 0, 'has_macros': False}
         totals[key]['grams'] += grams
         if row['calories_per_100g'] is not None:
             factor = grams / 100
@@ -307,8 +318,8 @@ def get_grocery(week_start):
             totals[key]['has_macros'] = True
 
     result = []
-    for k, v in sorted(totals.items()):
-        item = {'name': k, 'grams': round(v['grams'], 1), 'has_macros': v['has_macros']}
+    for _, v in sorted(totals.items()):
+        item = {'name': v['name'], 'grams': round(v['grams'], 1), 'has_macros': v['has_macros']}
         if v['has_macros']:
             item['calories'] = round(v['calories'])
             item['protein'] = round(v['protein'], 1)
