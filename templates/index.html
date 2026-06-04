@@ -192,8 +192,9 @@ textarea { resize: vertical; min-height: 60px; }
 .serving-picker label { margin: 0; white-space: nowrap; }
 
 /* Flash */
-.flash { position: fixed; bottom: 1.5rem; left: 50%; transform: translateX(-50%); background: var(--ink); color: white; padding: 8px 16px; border-radius: 99px; font-size: 13px; opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 200; }
+.flash { position: fixed; bottom: 1.5rem; left: 50%; transform: translateX(-50%); background: var(--ink); color: white; padding: 8px 16px; border-radius: 99px; font-size: 13px; opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 200; max-width: 480px; text-align: center; }
 .flash.show { opacity: 1; }
+.flash.error { background: var(--terracotta); }
 </style>
 </head>
 <body>
@@ -449,8 +450,32 @@ const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sun
 
 function flash(msg) {
   const el = document.getElementById('flash');
-  el.textContent = msg; el.classList.add('show');
+  el.textContent = msg;
+  el.classList.remove('error');
+  el.classList.add('show');
   setTimeout(() => el.classList.remove('show'), 2200);
+}
+
+function flashError(msg) {
+  const el = document.getElementById('flash');
+  el.textContent = msg;
+  el.classList.add('show', 'error');
+  setTimeout(() => el.classList.remove('show', 'error'), 4000);
+}
+
+async function apiFetch(url, opts = {}) {
+  let res;
+  try {
+    res = await fetch(url, opts);
+  } catch (_) {
+    throw new Error('Network error — is the server running?');
+  }
+  if (!res.ok) {
+    let msg = `Server error (${res.status})`;
+    try { const b = await res.json(); if (b.error) msg = b.error; } catch (_) {}
+    throw new Error(msg);
+  }
+  return res;
 }
 
 // ── Nav ───────────────────────────────────────────────────────────────────────
@@ -481,8 +506,10 @@ function updateWeekLabels() {
 
 // ── Ingredient Definitions ────────────────────────────────────────────────────
 async function loadIngredientDefs() {
-  const res = await fetch('/api/ingredient-defs');
-  ingredientDefs = await res.json();
+  try {
+    const res = await apiFetch('/api/ingredient-defs');
+    ingredientDefs = await res.json();
+  } catch (e) { flashError(e.message); }
 }
 
 function renderIngDefs() {
@@ -529,10 +556,12 @@ function editIngDef(id) {
 
 async function deleteIngDef(id) {
   if (!confirm('Delete this ingredient? Any recipes using it will lose macro data.')) return;
-  await fetch(`/api/ingredient-defs/${id}`, { method: 'DELETE' });
-  await loadIngredientDefs();
-  renderIngDefs();
-  flash('Ingredient deleted.');
+  try {
+    await apiFetch(`/api/ingredient-defs/${id}`, { method: 'DELETE' });
+    await loadIngredientDefs();
+    renderIngDefs();
+    flash('Ingredient deleted.');
+  } catch (e) { flashError(e.message); }
 }
 
 // Returns the newly-created def, for use when creating inline from recipe form
@@ -548,13 +577,15 @@ async function saveIngDef(returnNew = false) {
     fat: parseFloat(document.getElementById('id-fat').value) || 0,
   };
   let newDef = null;
-  if (id) {
-    await fetch(`/api/ingredient-defs/${id}`, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) });
-  } else {
-    const res = await fetch('/api/ingredient-defs', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) });
-    const json = await res.json();
-    newDef = { id: json.id, ...data, calories_per_100g: data.calories, protein_per_100g: data.protein, carbs_per_100g: data.carbs, fat_per_100g: data.fat, is_custom: 1 };
-  }
+  try {
+    if (id) {
+      await apiFetch(`/api/ingredient-defs/${id}`, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) });
+    } else {
+      const res = await apiFetch('/api/ingredient-defs', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) });
+      const json = await res.json();
+      newDef = { id: json.id, ...data, calories_per_100g: data.calories, protein_per_100g: data.protein, carbs_per_100g: data.carbs, fat_per_100g: data.fat, is_custom: 1 };
+    }
+  } catch (e) { flashError(e.message); return null; }
   closeIngDefModal();
   await loadIngredientDefs();
   renderIngDefs();
@@ -564,16 +595,20 @@ async function saveIngDef(returnNew = false) {
 
 // ── Recipes ───────────────────────────────────────────────────────────────────
 async function loadRecipes() {
-  const res = await fetch('/api/recipes');
-  recipes = await res.json();
-  await loadAllRecipeMacros();
-  renderRecipes();
+  try {
+    const res = await apiFetch('/api/recipes');
+    recipes = await res.json();
+    await loadAllRecipeMacros();
+    renderRecipes();
+  } catch (e) { flashError(e.message); }
 }
 
 async function loadAllRecipeMacros() {
   await Promise.all(recipes.map(async r => {
-    const res = await fetch(`/api/recipes/${r.id}/macros`);
-    recipeMacros[r.id] = await res.json();
+    try {
+      const res = await apiFetch(`/api/recipes/${r.id}/macros`);
+      recipeMacros[r.id] = await res.json();
+    } catch (_) {}
   }));
 }
 
@@ -738,8 +773,10 @@ async function saveRecipe() {
     notes: document.getElementById('r-notes').value.trim(),
     ingredients
   };
-  if (id) await fetch(`/api/recipes/${id}`, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) });
-  else await fetch('/api/recipes', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) });
+  try {
+    if (id) await apiFetch(`/api/recipes/${id}`, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) });
+    else await apiFetch('/api/recipes', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) });
+  } catch (e) { flashError(e.message); return; }
   closeRecipeModal();
   await loadRecipes();
   flash('Recipe saved!');
@@ -751,17 +788,21 @@ function editRecipe(id) {
 }
 async function deleteRecipe(id) {
   if (!confirm('Delete this recipe? It will also be removed from any meal plans.')) return;
-  await fetch(`/api/recipes/${id}`, { method: 'DELETE' });
-  await loadRecipes();
-  flash('Recipe deleted.');
+  try {
+    await apiFetch(`/api/recipes/${id}`, { method: 'DELETE' });
+    await loadRecipes();
+    flash('Recipe deleted.');
+  } catch (e) { flashError(e.message); }
 }
 
 // ── Planner ───────────────────────────────────────────────────────────────────
 async function loadPlan() {
   updateWeekLabels();
-  const res = await fetch(`/api/plan/${fmt(currentWeekStart)}`);
-  planEntries = await res.json();
-  renderPlanner();
+  try {
+    const res = await apiFetch(`/api/plan/${fmt(currentWeekStart)}`);
+    planEntries = await res.json();
+    renderPlanner();
+  } catch (e) { flashError(e.message); }
 }
 
 function renderPlanner() {
@@ -804,16 +845,20 @@ async function adjServings(id, delta) {
   if (!entry) return;
   entry.servings = Math.max(1, entry.servings + delta);
   document.getElementById(`sv-${id}`).textContent = entry.servings;
-  await fetch(`/api/plan/${id}`, {
-    method: 'PUT', headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ servings: entry.servings, recipe_id: entry.recipe_id, meal_slot: entry.meal_slot })
-  });
+  try {
+    await apiFetch(`/api/plan/${id}`, {
+      method: 'PUT', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ servings: entry.servings, recipe_id: entry.recipe_id, meal_slot: entry.meal_slot })
+    });
+  } catch (e) { flashError(e.message); }
   renderPlanner();
 }
 
 async function removeMeal(id) {
-  await fetch(`/api/plan/${id}`, { method: 'DELETE' });
-  await loadPlan();
+  try {
+    await apiFetch(`/api/plan/${id}`, { method: 'DELETE' });
+    await loadPlan();
+  } catch (e) { flashError(e.message); }
 }
 
 // ── Recipe Picker ─────────────────────────────────────────────────────────────
@@ -852,10 +897,12 @@ function adjPickerServ(delta) { pickerState.servings = Math.max(1, pickerState.s
 
 async function confirmPickedMeal() {
   if (!pickerState.recipe) { flash('Please select a recipe.'); return; }
-  await fetch('/api/plan', {
-    method: 'POST', headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ week_start: fmt(currentWeekStart), day_of_week: pickerState.day, meal_slot: pickerState.slot, recipe_id: pickerState.recipe, servings: pickerState.servings })
-  });
+  try {
+    await apiFetch('/api/plan', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ week_start: fmt(currentWeekStart), day_of_week: pickerState.day, meal_slot: pickerState.slot, recipe_id: pickerState.recipe, servings: pickerState.servings })
+    });
+  } catch (e) { flashError(e.message); return; }
   closePicker();
   await loadPlan();
 }
@@ -865,9 +912,11 @@ let checkedItems = new Set();
 
 async function loadGrocery() {
   updateWeekLabels();
-  const res = await fetch(`/api/grocery/${fmt(currentWeekStart)}`);
-  groceryItems = await res.json();
-  renderGrocery();
+  try {
+    const res = await apiFetch(`/api/grocery/${fmt(currentWeekStart)}`);
+    groceryItems = await res.json();
+    renderGrocery();
+  } catch (e) { flashError(e.message); }
 }
 
 function renderGrocery() {

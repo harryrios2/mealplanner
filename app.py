@@ -6,6 +6,22 @@ app = Flask(__name__)
 DB = os.path.join(os.path.dirname(__file__), 'mealplanner.db')
 BACKUP_DIR = os.path.join(os.path.dirname(__file__), 'backups')
 
+@app.errorhandler(Exception)
+def handle_error(e):
+    from werkzeug.exceptions import HTTPException
+    if isinstance(e, HTTPException):
+        return jsonify({'error': e.description}), e.code
+    app.logger.error(f'Unhandled error: {e}')
+    return jsonify({'error': 'An unexpected error occurred. Please try again.'}), 500
+
+def require(data, *fields):
+    if not data:
+        return 'Request body is required'
+    for f in fields:
+        if not str(data.get(f, '')).strip():
+            return f"'{f}' is required"
+    return None
+
 def backup_db():
     if not os.path.exists(DB):
         return
@@ -164,6 +180,9 @@ def list_recipes():
 @app.post('/api/recipes')
 def create_recipe():
     data = request.json
+    err = require(data, 'name')
+    if err:
+        return jsonify({'error': err}), 400
     db = get_db()
     cur = db.execute(
         'INSERT INTO recipes (name, base_servings, tags, notes) VALUES (?,?,?,?)',
@@ -182,6 +201,9 @@ def create_recipe():
 @app.put('/api/recipes/<int:rid>')
 def update_recipe(rid):
     data = request.json
+    err = require(data, 'name')
+    if err:
+        return jsonify({'error': err}), 400
     db = get_db()
     db.execute(
         'UPDATE recipes SET name=?, base_servings=?, tags=?, notes=? WHERE id=?',
@@ -215,6 +237,9 @@ def list_ingredient_defs():
 @app.post('/api/ingredient-defs')
 def create_ingredient_def():
     data = request.json
+    err = require(data, 'name')
+    if err:
+        return jsonify({'error': err}), 400
     db = get_db()
     cur = db.execute(
         'INSERT INTO ingredient_defs (name, calories_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g, is_custom) VALUES (?,?,?,?,?,1)',
@@ -226,6 +251,9 @@ def create_ingredient_def():
 @app.put('/api/ingredient-defs/<int:did>')
 def update_ingredient_def(did):
     data = request.json
+    err = require(data, 'name')
+    if err:
+        return jsonify({'error': err}), 400
     db = get_db()
     result = db.execute(
         'UPDATE ingredient_defs SET name=?, calories_per_100g=?, protein_per_100g=?, carbs_per_100g=?, fat_per_100g=? WHERE id=?',
@@ -261,6 +289,9 @@ def get_plan(week_start):
 @app.post('/api/plan')
 def add_to_plan():
     data = request.json
+    err = require(data, 'week_start', 'recipe_id')
+    if err:
+        return jsonify({'error': err}), 400
     db = get_db()
     cur = db.execute(
         'INSERT INTO meal_plan (week_start, day_of_week, meal_slot, recipe_id, servings) VALUES (?,?,?,?,?)',
