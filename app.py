@@ -227,10 +227,12 @@ def create_ingredient_def():
 def update_ingredient_def(did):
     data = request.json
     db = get_db()
-    db.execute(
+    result = db.execute(
         'UPDATE ingredient_defs SET name=?, calories_per_100g=?, protein_per_100g=?, carbs_per_100g=?, fat_per_100g=? WHERE id=?',
         (data['name'], data.get('calories', 0), data.get('protein', 0), data.get('carbs', 0), data.get('fat', 0), did)
     )
+    if result.rowcount == 0:
+        return jsonify({'error': 'Not found'}), 404
     db.commit()
     return jsonify({'ok': True})
 
