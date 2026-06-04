@@ -20,6 +20,7 @@ def backup_db():
 def get_db():
     conn = sqlite3.connect(DB)
     conn.row_factory = sqlite3.Row
+    conn.execute('PRAGMA foreign_keys = ON')
     return conn
 
 SEED_INGREDIENTS = [
@@ -135,7 +136,15 @@ def init_db():
                 )
         db.commit()
 
+def migrate_db():
+    with get_db() as db:
+        cols = {r[1] for r in db.execute('PRAGMA table_info(ingredients)').fetchall()}
+        if 'ingredient_def_id' not in cols:
+            db.execute('ALTER TABLE ingredients ADD COLUMN ingredient_def_id INTEGER REFERENCES ingredient_defs(id) ON DELETE SET NULL')
+            db.commit()
+
 init_db()
+migrate_db()
 backup_db()
 
 # ── Recipes ──────────────────────────────────────────────────────────────────
