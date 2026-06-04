@@ -167,7 +167,7 @@ def create_recipe():
     db = get_db()
     cur = db.execute(
         'INSERT INTO recipes (name, base_servings, tags, notes) VALUES (?,?,?,?)',
-        (data['name'], data.get('base_servings', 4), data.get('tags', ''), data.get('notes', ''))
+        (data['name'], max(1, int(data.get('base_servings', 4))), data.get('tags', ''), data.get('notes', ''))
     )
     recipe_id = cur.lastrowid
     for ing in data.get('ingredients', []):
@@ -185,7 +185,7 @@ def update_recipe(rid):
     db = get_db()
     db.execute(
         'UPDATE recipes SET name=?, base_servings=?, tags=?, notes=? WHERE id=?',
-        (data['name'], data.get('base_servings', 4), data.get('tags', ''), data.get('notes', ''), rid)
+        (data['name'], max(1, int(data.get('base_servings', 4))), data.get('tags', ''), data.get('notes', ''), rid)
     )
     db.execute('DELETE FROM ingredients WHERE recipe_id = ?', (rid,))
     for ing in data.get('ingredients', []):
