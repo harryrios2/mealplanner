@@ -305,7 +305,7 @@ def get_grocery(week_start):
         grams = row['grams_per_base_serving'] * scale
         key = row['name'].strip().lower()
         if key not in totals:
-            totals[key] = {'grams': 0, 'calories': 0, 'protein': 0, 'carbs': 0, 'fat': 0, 'has_macros': False}
+            totals[key] = {'name': row['name'].strip(), 'grams': 0, 'calories': 0, 'protein': 0, 'carbs': 0, 'fat': 0, 'has_macros': False}
         totals[key]['grams'] += grams
         if row['calories_per_100g'] is not None:
             factor = grams / 100
@@ -316,8 +316,8 @@ def get_grocery(week_start):
             totals[key]['has_macros'] = True
 
     result = []
-    for k, v in sorted(totals.items()):
-        item = {'name': k, 'grams': round(v['grams'], 1), 'has_macros': v['has_macros']}
+    for _, v in sorted(totals.items()):
+        item = {'name': v['name'], 'grams': round(v['grams'], 1), 'has_macros': v['has_macros']}
         if v['has_macros']:
             item['calories'] = round(v['calories'])
             item['protein'] = round(v['protein'], 1)
