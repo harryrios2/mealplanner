@@ -434,7 +434,12 @@ function getMonday(d) {
   date.setHours(0,0,0,0);
   return date;
 }
-function fmt(d) { return d.toISOString().split('T')[0]; }
+function fmt(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
 function weekLabel(d) {
   const end = new Date(d); end.setDate(d.getDate() + 6);
   const opts = { month: 'short', day: 'numeric' };
