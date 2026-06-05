@@ -86,6 +86,11 @@ body { font-family: var(--font-body); background: var(--cream); color: var(--ink
 .add-card { border: 1.5px dashed var(--border); border-radius: var(--radius-lg); padding: 1.1rem 1.25rem; cursor: pointer; display: flex; align-items: center; gap: 10px; color: var(--ink-muted); font-size: 14px; transition: all var(--transition); }
 .add-card:hover { border-color: var(--sage-mid); color: var(--sage); background: var(--sage-light); }
 
+.recipe-filters { display: flex; gap: 8px; align-items: center; flex: 1; flex-wrap: wrap; }
+.recipe-filters input[type=text] { width: 200px; }
+.recipe-filters select { padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius); font-family: var(--font-body); font-size: 14px; background: var(--cream); color: var(--ink); outline: none; cursor: pointer; transition: border-color var(--transition); }
+.recipe-filters select:focus { border-color: var(--sage-mid); background: var(--warm-white); }
+
 /* Planner */
 .day-grid { display: flex; flex-direction: column; gap: 10px; }
 .day-row { display: grid; grid-template-columns: 80px 1fr; gap: 12px; align-items: start; }
@@ -154,7 +159,8 @@ input:focus, select:focus, textarea:focus { border-color: var(--sage-mid); backg
 textarea { resize: vertical; min-height: 60px; }
 
 /* Ingredient row in recipe form */
-.ing-row { display: grid; grid-template-columns: 1fr 90px 28px; gap: 8px; align-items: start; margin-bottom: 8px; position: relative; }
+.ing-row { display: grid; grid-template-columns: 1fr 90px auto 28px; gap: 8px; align-items: center; margin-bottom: 8px; position: relative; }
+.ing-kcal-preview { font-size: 11px; color: var(--sage); white-space: nowrap; min-width: 54px; text-align: right; }
 .ing-row input { margin: 0; }
 .remove-ing { width: 28px; height: 28px; border: 1px solid var(--border); border-radius: var(--radius); background: none; cursor: pointer; color: var(--ink-faint); font-size: 16px; display: flex; align-items: center; justify-content: center; transition: all var(--transition); flex-shrink: 0; }
 .remove-ing:hover { color: var(--terracotta); border-color: var(--terracotta); }
@@ -222,6 +228,10 @@ textarea { resize: vertical; min-height: 60px; }
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
         Ingredients
       </div>
+      <div class="nav-item" data-view="chef">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 2a4 4 0 014 4c0 1.5-.8 2.8-2 3.5V11h2a2 2 0 012 2v7H6v-7a2 2 0 012-2h2V9.5A4 4 0 018 6a4 4 0 014-4z"/><line x1="9" y1="15" x2="9" y2="18"/><line x1="12" y1="14" x2="12" y2="18"/><line x1="15" y1="15" x2="15" y2="18"/></svg>
+        Claude Chef
+      </div>
     </nav>
     <div class="sidebar-footer">
       All data stored locally.<br>
@@ -238,8 +248,14 @@ textarea { resize: vertical; min-height: 60px; }
         <h2>Recipe book</h2>
         <p>Your personal collection — all quantities in grams per serving.</p>
       </div>
-      <div style="margin-bottom:1.25rem;">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:1.25rem;">
         <button class="btn btn-primary" onclick="openRecipeModal()">+ Add recipe</button>
+        <div class="recipe-filters">
+          <input type="text" id="recipe-search" placeholder="Search recipes…" oninput="renderRecipes()" style="margin:0;">
+          <select id="recipe-tag-select" onchange="renderRecipes()" style="margin:0;">
+            <option value="">All tags</option>
+          </select>
+        </div>
       </div>
       <div class="recipe-grid" id="recipe-grid"></div>
     </div>
@@ -291,15 +307,48 @@ textarea { resize: vertical; min-height: 60px; }
           <thead>
             <tr>
               <th>Name</th>
-              <th style="text-align:right;">Calories</th>
-              <th style="text-align:right;">Protein</th>
-              <th style="text-align:right;">Carbs</th>
-              <th style="text-align:right;">Fat</th>
+              <th style="text-align:right;">Calories / 100g</th>
+              <th style="text-align:right;">Protein / 100g</th>
+              <th style="text-align:right;">Carbs / 100g</th>
+              <th style="text-align:right;">Fat / 100g</th>
               <th></th>
             </tr>
           </thead>
           <tbody id="ingdef-tbody"></tbody>
         </table>
+      </div>
+    </div>
+
+    <!-- Claude Chef View -->
+    <div class="view" id="view-chef">
+      <div class="view-header">
+        <h2>Claude Chef</h2>
+        <p>Describe a dish and Claude will build the recipe, match ingredients, and add it to your book.</p>
+      </div>
+      <div class="card" style="padding:1.5rem;max-width:640px;">
+        <div class="form-group" style="margin-bottom:1rem;">
+          <label>What would you like to cook?</label>
+          <textarea id="chef-prompt" rows="3" placeholder="e.g. A spicy Thai green curry with chicken and jasmine rice&#10;e.g. Simple Greek salad with feta&#10;e.g. High-protein overnight oats with banana and peanut butter" style="resize:vertical;"></textarea>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <button class="btn btn-primary" onclick="submitChefPrompt()" id="chef-btn">Generate recipe</button>
+          <span id="chef-status" style="font-size:13px;color:var(--ink-muted);"></span>
+        </div>
+      </div>
+
+      <div id="chef-result" style="margin-top:1.5rem;max-width:640px;display:none;">
+        <div class="card" style="padding:1.5rem;">
+          <div style="display:flex;align-items:start;justify-content:space-between;gap:12px;margin-bottom:1rem;">
+            <div>
+              <h3 id="chef-recipe-name" style="font-family:var(--font-display);font-size:1.2rem;font-weight:600;margin-bottom:4px;"></h3>
+              <div id="chef-recipe-tags" class="tags"></div>
+            </div>
+            <div class="macro-pills" id="chef-macro-pills" style="flex-shrink:0;"></div>
+          </div>
+          <div id="chef-ingredients" style="margin-bottom:1rem;"></div>
+          <p id="chef-notes" style="font-size:13px;color:var(--ink-muted);font-style:italic;"></p>
+          <div id="chef-new-ings" style="margin-top:0.75rem;"></div>
+        </div>
       </div>
     </div>
 
@@ -319,18 +368,12 @@ textarea { resize: vertical; min-height: 60px; }
         <label>Recipe name</label>
         <input type="text" id="r-name" placeholder="e.g. Pasta carbonara">
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-        <div class="form-group">
-          <label>Base servings</label>
-          <input type="number" id="r-servings" value="4" min="1" max="99">
-        </div>
-        <div class="form-group">
-          <label>Tags (comma-separated)</label>
-          <input type="text" id="r-tags" placeholder="Italian, pasta">
-        </div>
+      <div class="form-group">
+        <label>Tags (comma-separated)</label>
+        <input type="text" id="r-tags" placeholder="Italian, pasta">
       </div>
       <div class="form-group">
-        <label>Ingredients <span style="font-weight:300;color:var(--ink-faint)">(grams per base serving)</span></label>
+        <label>Ingredients <span style="font-weight:300;color:var(--ink-faint)">(grams per serving)</span></label>
         <div id="ing-list"></div>
         <button class="btn btn-secondary btn-sm" style="margin-top:6px;" onclick="addIngredientRow()">+ Add ingredient</button>
       </div>
@@ -598,6 +641,7 @@ async function loadRecipes() {
     const res = await apiFetch('/api/recipes');
     recipes = await res.json();
     await loadAllRecipeMacros();
+    renderTagDropdown();
     renderRecipes();
   } catch (e) { flashError(e.message); }
 }
@@ -611,13 +655,35 @@ async function loadAllRecipeMacros() {
   }));
 }
 
+function renderTagDropdown() {
+  const allTags = [...new Set(
+    recipes.flatMap(r => r.tags ? r.tags.split(',').map(t => t.trim()).filter(Boolean) : [])
+  )].sort();
+  const sel = document.getElementById('recipe-tag-select');
+  const current = sel.value;
+  sel.innerHTML = '<option value="">All tags</option>' +
+    allTags.map(t => `<option value="${t}" ${t === current ? 'selected' : ''}>${t}</option>`).join('');
+}
+
 function renderRecipes() {
   const grid = document.getElementById('recipe-grid');
+  const q = (document.getElementById('recipe-search').value || '').toLowerCase().trim();
+  const tag = document.getElementById('recipe-tag-select').value;
+  const visible = recipes.filter(r => {
+    const matchesSearch = !q || r.name.toLowerCase().includes(q) ||
+      (r.tags && r.tags.toLowerCase().includes(q));
+    const matchesTag = !tag || (r.tags && r.tags.split(',').map(t => t.trim()).includes(tag));
+    return matchesSearch && matchesTag;
+  });
   if (!recipes.length) {
     grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;"><p>No recipes yet</p><small>Add your first recipe to get started.</small></div>`;
     return;
   }
-  grid.innerHTML = recipes.map(r => {
+  if (!visible.length) {
+    grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;"><p>No recipes match</p><small>Try clearing the search or tag filter.</small></div>`;
+    return;
+  }
+  grid.innerHTML = visible.map(r => {
     const m = recipeMacros[r.id];
     const hasMacros = m && m.per_serving && m.per_serving.calories > 0;
     const macroPills = hasMacros ? `
@@ -635,8 +701,7 @@ function renderRecipes() {
       </div>
       <h3>${r.name}</h3>
       <div class="recipe-meta">
-        <span>🍽 ${r.base_servings} servings</span>
-        <span>📦 ${r.ingredients.length} ingredients</span>
+        <span>📦 ${r.ingredients.length} ingredient${r.ingredients.length !== 1 ? 's' : ''}</span>
       </div>
       ${macroPills}
       ${r.tags ? `<div class="tags" style="margin-top:8px;">${r.tags.split(',').map(t => `<span class="tag">${t.trim()}</span>`).join('')}</div>` : ''}
@@ -649,7 +714,6 @@ function openRecipeModal(recipe = null) {
   document.getElementById('edit-recipe-id').value = recipe ? recipe.id : '';
   document.getElementById('recipe-modal-title').textContent = recipe ? 'Edit recipe' : 'New recipe';
   document.getElementById('r-name').value = recipe ? recipe.name : '';
-  document.getElementById('r-servings').value = recipe ? recipe.base_servings : 4;
   document.getElementById('r-tags').value = recipe ? recipe.tags : '';
   document.getElementById('r-notes').value = recipe ? recipe.notes : '';
   const list = document.getElementById('ing-list');
@@ -698,6 +762,22 @@ function addIngredientRow(name = '', grams = '', defId = null) {
   gramsInput.step = '0.1';
   gramsInput.value = grams;
 
+  const kcalPreview = document.createElement('span');
+  kcalPreview.className = 'ing-kcal-preview';
+
+  function updateKcalPreview() {
+    const g = parseFloat(gramsInput.value);
+    const id = parseInt(row.dataset.defId);
+    const def = id ? ingredientDefs.find(d => d.id === id) : null;
+    if (def && g > 0) {
+      kcalPreview.textContent = Math.round(def.calories_per_100g * g / 100) + ' kcal';
+    } else {
+      kcalPreview.textContent = '';
+    }
+  }
+
+  gramsInput.addEventListener('input', updateKcalPreview);
+
   const removeBtn = document.createElement('button');
   removeBtn.className = 'remove-ing';
   removeBtn.textContent = '✕';
@@ -705,8 +785,10 @@ function addIngredientRow(name = '', grams = '', defId = null) {
 
   row.appendChild(searchWrap);
   row.appendChild(gramsInput);
+  row.appendChild(kcalPreview);
   row.appendChild(removeBtn);
   document.getElementById('ing-list').appendChild(row);
+  updateKcalPreview();
 }
 
 function showIngDropdown(input, dropdown, row) {
@@ -720,11 +802,13 @@ function showIngDropdown(input, dropdown, row) {
   matches.forEach(d => {
     const opt = document.createElement('div');
     opt.className = 'ing-opt';
-    opt.innerHTML = `<span class="ing-opt-name">${d.name}</span><span class="ing-opt-cals">${d.calories_per_100g} kcal</span>`;
+    opt.innerHTML = `<span class="ing-opt-name">${d.name}</span><span class="ing-opt-cals">${d.calories_per_100g} kcal/100g</span>`;
     opt.addEventListener('mousedown', () => {
       input.value = d.name;
       row.dataset.defId = d.id;
       dropdown.classList.remove('open');
+      // trigger kcal preview update
+      row.querySelector('.ing-kcal-preview') && row.querySelector('input[type=number]').dispatchEvent(new Event('input'));
     });
     dropdown.appendChild(opt);
   });
@@ -767,7 +851,6 @@ async function saveRecipe() {
   if (!name) { flash('Please enter a recipe name.'); return; }
   const data = {
     name,
-    base_servings: parseInt(document.getElementById('r-servings').value),
     tags: document.getElementById('r-tags').value.trim(),
     notes: document.getElementById('r-notes').value.trim(),
     ingredients
@@ -879,7 +962,7 @@ function renderPickerList(list) {
     return `<div class="picker-item" onclick="selectPickerRecipe(${r.id})" id="pi-${r.id}"
          style="${pickerState.recipe === r.id ? 'border-color:var(--sage-mid);background:var(--sage-light);' : ''}">
       <span>${r.name}</span>
-      <span class="picker-meta">${r.base_servings} srv${calStr}</span>
+      <span class="picker-meta">per serving${calStr}</span>
     </div>`;
   }).join('');
 }
@@ -959,6 +1042,84 @@ function copyGroceryList() {
   navigator.clipboard.writeText(text).then(() => flash('Copied to clipboard!'));
 }
 function printGroceryList() { window.print(); }
+
+// ── Claude Chef ───────────────────────────────────────────────────────────────
+async function submitChefPrompt() {
+  const prompt = document.getElementById('chef-prompt').value.trim();
+  if (!prompt) { flash('Please describe a recipe first.'); return; }
+
+  const btn = document.getElementById('chef-btn');
+  const status = document.getElementById('chef-status');
+  const result = document.getElementById('chef-result');
+
+  btn.disabled = true;
+  btn.textContent = 'Cooking…';
+  status.textContent = 'Claude is building your recipe…';
+  result.style.display = 'none';
+
+  try {
+    const res = await apiFetch('/api/chef', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ prompt })
+    });
+    const data = await res.json();
+    renderChefResult(data);
+    await loadIngredientDefs();
+    await loadRecipes();
+    status.textContent = 'Recipe added to your book!';
+  } catch (e) {
+    const msg = e.message.includes('ANTHROPIC_API_KEY')
+      ? 'API key not set — start the server with: ANTHROPIC_API_KEY=your-key python3 app.py'
+      : e.message;
+    flashError(msg);
+    status.textContent = '';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Generate recipe';
+  }
+}
+
+function renderChefResult(data) {
+  const r = data.recipe;
+  const m = data.macros;
+  const result = document.getElementById('chef-result');
+
+  document.getElementById('chef-recipe-name').textContent = r.name;
+
+  const tagsEl = document.getElementById('chef-recipe-tags');
+  tagsEl.innerHTML = r.tags
+    ? r.tags.split(',').map(t => `<span class="tag">${t.trim()}</span>`).join('')
+    : '';
+
+  const pillsEl = document.getElementById('chef-macro-pills');
+  if (m && m.calories > 0) {
+    pillsEl.innerHTML = `
+      <span class="macro-pill cal">${Math.round(m.calories)} kcal</span>
+      <span class="macro-pill pro">${m.protein}g P</span>
+      <span class="macro-pill carb">${m.carbs}g C</span>
+      <span class="macro-pill fat">${m.fat}g F</span>`;
+  } else {
+    pillsEl.innerHTML = '';
+  }
+
+  const ingsEl = document.getElementById('chef-ingredients');
+  ingsEl.innerHTML = r.ingredients.map(i =>
+    `<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);font-size:14px;">
+       <span>${i.name}</span>
+       <span style="color:var(--ink-muted);font-weight:500;">${fmtGrams(i.grams_per_base_serving)}</span>
+     </div>`
+  ).join('');
+
+  document.getElementById('chef-notes').textContent = r.notes || '';
+
+  const newEl = document.getElementById('chef-new-ings');
+  newEl.innerHTML = data.new_ingredients && data.new_ingredients.length
+    ? `<p style="font-size:12px;color:var(--ink-muted);">New ingredients created: ${data.new_ingredients.join(', ')}</p>`
+    : '';
+
+  result.style.display = 'block';
+}
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 async function init() {

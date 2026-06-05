@@ -18,10 +18,11 @@ BASE_URL = "https://api.nal.usda.gov/fdc/v1"
 DB = os.path.join(os.path.dirname(__file__), 'mealplanner.db')
 
 # USDA nutrient numbers
-N_ENERGY  = 208   # Energy, kcal
-N_PROTEIN = 203   # Protein
-N_FAT     = 204   # Total lipid (fat)
-N_CARBS   = 205   # Carbohydrate, by difference
+# Foundation Foods often report energy as 957/958 (Atwater factors) instead of 208
+N_ENERGY  = {208, 957, 958}
+N_PROTEIN = {203}
+N_FAT     = {204}
+N_CARBS   = {205}
 
 
 def fetch_page(api_key, data_type, page, page_size=200):
@@ -68,13 +69,14 @@ def parse_macros(food):
         except (TypeError, ValueError):
             continue
         val = float(n.get('amount') or 0)
-        if num == N_ENERGY:
-            m['calories'] = val
-        elif num == N_PROTEIN:
+        if num in N_ENERGY:
+            if m['calories'] == 0:   # take first match; prefer lower number (208 < 957 < 958)
+                m['calories'] = val
+        elif num in N_PROTEIN:
             m['protein'] = val
-        elif num == N_FAT:
+        elif num in N_FAT:
             m['fat'] = val
-        elif num == N_CARBS:
+        elif num in N_CARBS:
             m['carbs'] = val
     return m
 
