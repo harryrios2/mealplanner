@@ -154,7 +154,8 @@ input:focus, select:focus, textarea:focus { border-color: var(--sage-mid); backg
 textarea { resize: vertical; min-height: 60px; }
 
 /* Ingredient row in recipe form */
-.ing-row { display: grid; grid-template-columns: 1fr 90px 28px; gap: 8px; align-items: start; margin-bottom: 8px; position: relative; }
+.ing-row { display: grid; grid-template-columns: 1fr 90px auto 28px; gap: 8px; align-items: center; margin-bottom: 8px; position: relative; }
+.ing-kcal-preview { font-size: 11px; color: var(--sage); white-space: nowrap; min-width: 54px; text-align: right; }
 .ing-row input { margin: 0; }
 .remove-ing { width: 28px; height: 28px; border: 1px solid var(--border); border-radius: var(--radius); background: none; cursor: pointer; color: var(--ink-faint); font-size: 16px; display: flex; align-items: center; justify-content: center; transition: all var(--transition); flex-shrink: 0; }
 .remove-ing:hover { color: var(--terracotta); border-color: var(--terracotta); }
@@ -291,10 +292,10 @@ textarea { resize: vertical; min-height: 60px; }
           <thead>
             <tr>
               <th>Name</th>
-              <th style="text-align:right;">Calories</th>
-              <th style="text-align:right;">Protein</th>
-              <th style="text-align:right;">Carbs</th>
-              <th style="text-align:right;">Fat</th>
+              <th style="text-align:right;">Calories / 100g</th>
+              <th style="text-align:right;">Protein / 100g</th>
+              <th style="text-align:right;">Carbs / 100g</th>
+              <th style="text-align:right;">Fat / 100g</th>
               <th></th>
             </tr>
           </thead>
@@ -690,6 +691,22 @@ function addIngredientRow(name = '', grams = '', defId = null) {
   gramsInput.step = '0.1';
   gramsInput.value = grams;
 
+  const kcalPreview = document.createElement('span');
+  kcalPreview.className = 'ing-kcal-preview';
+
+  function updateKcalPreview() {
+    const g = parseFloat(gramsInput.value);
+    const id = parseInt(row.dataset.defId);
+    const def = id ? ingredientDefs.find(d => d.id === id) : null;
+    if (def && g > 0) {
+      kcalPreview.textContent = Math.round(def.calories_per_100g * g / 100) + ' kcal';
+    } else {
+      kcalPreview.textContent = '';
+    }
+  }
+
+  gramsInput.addEventListener('input', updateKcalPreview);
+
   const removeBtn = document.createElement('button');
   removeBtn.className = 'remove-ing';
   removeBtn.textContent = '✕';
@@ -697,8 +714,10 @@ function addIngredientRow(name = '', grams = '', defId = null) {
 
   row.appendChild(searchWrap);
   row.appendChild(gramsInput);
+  row.appendChild(kcalPreview);
   row.appendChild(removeBtn);
   document.getElementById('ing-list').appendChild(row);
+  updateKcalPreview();
 }
 
 function showIngDropdown(input, dropdown, row) {
@@ -712,11 +731,13 @@ function showIngDropdown(input, dropdown, row) {
   matches.forEach(d => {
     const opt = document.createElement('div');
     opt.className = 'ing-opt';
-    opt.innerHTML = `<span class="ing-opt-name">${d.name}</span><span class="ing-opt-cals">${d.calories_per_100g} kcal</span>`;
+    opt.innerHTML = `<span class="ing-opt-name">${d.name}</span><span class="ing-opt-cals">${d.calories_per_100g} kcal/100g</span>`;
     opt.addEventListener('mousedown', () => {
       input.value = d.name;
       row.dataset.defId = d.id;
       dropdown.classList.remove('open');
+      // trigger kcal preview update
+      row.querySelector('.ing-kcal-preview') && row.querySelector('input[type=number]').dispatchEvent(new Event('input'));
     });
     dropdown.appendChild(opt);
   });
