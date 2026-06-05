@@ -1,6 +1,8 @@
 from flask import Flask, render_template, request, jsonify
-import sqlite3, os, shutil, glob, json, re
+import sqlite3, os, shutil, glob, json, re, smtplib
 from datetime import datetime
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 
 app = Flask(__name__)
 DB = os.path.join(os.path.dirname(__file__), 'mealplanner.db')
@@ -355,6 +357,138 @@ def get_grocery(week_start):
         for _, v in sorted(totals.items())
     ]
     return jsonify(result)
+
+PANTRY_KEYWORDS = [
+    'oil', 'vinegar', 'sauce', 'salt', 'pepper', 'spice', 'seasoning',
+    'garlic', 'ginger', 'chili', 'chilli', 'cumin', 'coriander', 'paprika',
+    'turmeric', 'oregano', 'thyme', 'basil', 'bay', 'herb', 'mustard',
+    'stock', 'broth', 'bouillon', 'sugar', 'honey', 'syrup',
+]
+
+def is_pantry_item(name):
+    n = name.lower()
+    return any(k in n for k in PANTRY_KEYWORDS)
+
+@app.post('/api/grocery/<week_start>/email')
+def email_grocery(week_start):
+    data = request.json or {}
+
+    # Validate email
+    email = str(data.get('email', '')).strip()
+    if not email:
+        return jsonify({'error': "'email' is required"}), 400
+    if not re.match(r'^[^@\s]+@[^@\s]+\.[^@\s]+$', email):
+        return jsonify({'error': "Invalid email address"}), 400
+
+    # Check SMTP config
+    smtp_user = os.environ.get('SMTP_USER', '')
+    smtp_password = os.environ.get('SMTP_PASSWORD', '')
+    if not smtp_user or not smtp_password:
+        return jsonify({'error': 'SMTP not configured — set SMTP_USER and SMTP_PASSWORD env vars'}), 503
+
+    smtp_host = os.environ.get('SMTP_HOST', 'smtp.gmail.com')
+    smtp_port = int(os.environ.get('SMTP_PORT', '587'))
+    smtp_from = os.environ.get('SMTP_FROM', smtp_user)
+    omit_pantry = bool(data.get('omit_pantry', False))
+
+    # Fetch grocery list (same logic as GET /api/grocery/<week_start>)
+    db = get_db()
+    rows = db.execute(
+        '''SELECT i.name, i.grams_per_base_serving, mp.servings, r.base_servings, r.name as recipe_name
+           FROM meal_plan mp
+           JOIN recipes r ON r.id = mp.recipe_id
+           JOIN ingredients i ON i.recipe_id = r.id
+           WHERE mp.week_start = ?''',
+        (week_start,)
+    ).fetchall()
+
+    totals = {}
+    for row in rows:
+        scale = row['servings'] / row['base_servings']
+        grams = row['grams_per_base_serving'] * scale
+        key = row['name'].strip().lower()
+        if key not in totals:
+            totals[key] = {'name': row['name'].strip(), 'grams': 0, 'recipes': set()}
+        totals[key]['grams'] += grams
+        totals[key]['recipes'].add(row['recipe_name'])
+
+    items = [
+        {'name': v['name'], 'grams': round(v['grams'], 1), 'recipes': sorted(v['recipes'])}
+        for _, v in sorted(totals.items())
+    ]
+
+    if omit_pantry:
+        items = [i for i in items if not is_pantry_item(i['name'])]
+
+    def fmt_grams(g):
+        return f"{int(g)} g" if g % 1 == 0 else f"{g:.1f} g"
+
+    # Build plain text body
+    plain_lines = [f"Grocery list — w/c {week_start}", ""]
+    for item in items:
+        recipes_str = ', '.join(item['recipes'])
+        plain_lines.append(f"{item['name']}: {fmt_grams(item['grams'])}  ({recipes_str})")
+    plain_text = '\n'.join(plain_lines)
+
+    # Build HTML body
+    row_html = []
+    for idx, item in enumerate(items):
+        bg = '#F7F3EC' if idx % 2 == 0 else '#FDFAF6'
+        recipes_str = ', '.join(item['recipes'])
+        row_html.append(
+            f'<tr style="background:{bg};">'
+            f'<td style="padding:8px 12px;border-bottom:1px solid #E2DDD6;">{item["name"]}</td>'
+            f'<td style="padding:8px 12px;border-bottom:1px solid #E2DDD6;white-space:nowrap;">{fmt_grams(item["grams"])}</td>'
+            f'<td style="padding:8px 12px;border-bottom:1px solid #E2DDD6;color:#6B6560;font-size:13px;">{recipes_str}</td>'
+            f'</tr>'
+        )
+    html_body = f'''<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"></head>
+<body style="font-family:'DM Sans',system-ui,sans-serif;background:#F7F3EC;margin:0;padding:24px;">
+  <div style="max-width:640px;margin:0 auto;background:#FDFAF6;border:1px solid #E2DDD6;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(28,26,23,0.06);">
+    <div style="padding:24px 28px 16px;border-bottom:1px solid #E2DDD6;">
+      <h1 style="font-family:Georgia,serif;font-size:1.4rem;font-weight:600;color:#1C1A17;margin:0 0 4px;">Mise en Place</h1>
+      <p style="margin:0;font-size:14px;color:#6B6560;">Grocery list — w/c {week_start}</p>
+    </div>
+    <div style="padding:16px 28px 24px;">
+      <table style="width:100%;border-collapse:collapse;font-size:14px;">
+        <thead>
+          <tr style="background:#5C7A65;">
+            <th style="padding:8px 12px;text-align:left;color:white;font-weight:500;font-size:12px;letter-spacing:0.06em;text-transform:uppercase;">Ingredient</th>
+            <th style="padding:8px 12px;text-align:left;color:white;font-weight:500;font-size:12px;letter-spacing:0.06em;text-transform:uppercase;">Amount</th>
+            <th style="padding:8px 12px;text-align:left;color:white;font-weight:500;font-size:12px;letter-spacing:0.06em;text-transform:uppercase;">Recipes</th>
+          </tr>
+        </thead>
+        <tbody>
+          {''.join(row_html)}
+        </tbody>
+      </table>
+      {"<p style='margin-top:16px;font-size:12px;color:#B8B3AC;'>Pantry staples (oils, spices, condiments) are not shown.</p>" if omit_pantry else ""}
+    </div>
+  </div>
+</body>
+</html>'''
+
+    # Build MIME message
+    msg = MIMEMultipart('alternative')
+    msg['Subject'] = f'Grocery list — w/c {week_start}'
+    msg['From'] = smtp_from
+    msg['To'] = email
+    msg.attach(MIMEText(plain_text, 'plain', 'utf-8'))
+    msg.attach(MIMEText(html_body, 'html', 'utf-8'))
+
+    try:
+        with smtplib.SMTP(smtp_host, smtp_port) as server:
+            server.ehlo()
+            server.starttls()
+            server.login(smtp_user, smtp_password)
+            server.sendmail(smtp_from, [email], msg.as_string())
+    except Exception as e:
+        app.logger.error(f'SMTP error: {e}')
+        return jsonify({'error': f'Failed to send email: {e}'}), 500
+
+    return jsonify({'ok': True})
 
 # ── Recipe macros ─────────────────────────────────────────────────────────────
 

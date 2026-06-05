@@ -290,6 +290,11 @@ textarea { resize: vertical; min-height: 60px; }
         <button class="btn btn-sage btn-sm" onclick="printGroceryList()">Print</button>
         <button class="btn btn-sm" id="pantry-toggle" onclick="togglePantry()" style="border:1px solid var(--border);background:var(--warm-white);color:var(--ink-muted);">Hide oils &amp; spices</button>
       </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:1.5rem;flex-wrap:wrap;">
+        <input type="email" id="grocery-email" placeholder="your@email.com" style="width:220px;margin:0;padding:5px 10px;font-size:13px;" autocomplete="email">
+        <button class="btn btn-secondary btn-sm" id="email-send-btn" onclick="sendGroceryEmail()">Send</button>
+        <span id="email-send-status" style="font-size:13px;color:var(--ink-muted);"></span>
+      </div>
       <div id="grocery-content"></div>
     </div>
 
@@ -1087,6 +1092,38 @@ function copyGroceryList() {
 }
 function printGroceryList() { window.print(); }
 
+async function sendGroceryEmail() {
+  const emailInput = document.getElementById('grocery-email');
+  const sendBtn = document.getElementById('email-send-btn');
+  const statusEl = document.getElementById('email-send-status');
+  const email = emailInput.value.trim();
+
+  if (!email) { flashError('Please enter an email address.'); return; }
+
+  sendBtn.disabled = true;
+  statusEl.textContent = 'Sending…';
+  statusEl.style.color = 'var(--ink-muted)';
+
+  localStorage.setItem('groceryEmail', email);
+
+  try {
+    const res = await apiFetch(`/api/grocery/${fmt(currentWeekStart)}/email`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ email, omit_pantry: omitPantry })
+    });
+    await res.json();
+    statusEl.textContent = 'Sent!';
+    statusEl.style.color = 'var(--sage)';
+    setTimeout(() => { statusEl.textContent = ''; }, 3000);
+  } catch (e) {
+    statusEl.textContent = '';
+    flashError(e.message);
+  } finally {
+    sendBtn.disabled = false;
+  }
+}
+
 // ── Claude Chef ───────────────────────────────────────────────────────────────
 async function submitChefPrompt() {
   const prompt = document.getElementById('chef-prompt').value.trim();
@@ -1168,6 +1205,12 @@ function renderChefResult(data) {
 // ── Init ──────────────────────────────────────────────────────────────────────
 async function init() {
   updateWeekLabels();
+  // Pre-fill saved email
+  const savedEmail = localStorage.getItem('groceryEmail');
+  if (savedEmail) {
+    const emailInput = document.getElementById('grocery-email');
+    if (emailInput) emailInput.value = savedEmail;
+  }
   await loadIngredientDefs();
   await loadRecipes();
   loadPlan();
