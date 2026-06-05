@@ -288,6 +288,7 @@ textarea { resize: vertical; min-height: 60px; }
       <div class="grocery-actions">
         <button class="btn btn-secondary btn-sm" onclick="copyGroceryList()">Copy as text</button>
         <button class="btn btn-sage btn-sm" onclick="printGroceryList()">Print</button>
+        <button class="btn btn-sm" id="pantry-toggle" onclick="togglePantry()" style="border:1px solid var(--border);background:var(--warm-white);color:var(--ink-muted);">Hide oils &amp; spices</button>
       </div>
       <div id="grocery-content"></div>
     </div>
@@ -991,6 +992,42 @@ async function confirmPickedMeal() {
 
 // ── Grocery ───────────────────────────────────────────────────────────────────
 let checkedItems = new Set();
+let omitPantry = JSON.parse(localStorage.getItem('omitPantry') || 'false');
+
+const PANTRY_KEYWORDS = [
+  'oil', 'vinegar', 'sauce', 'salt', 'pepper', 'spice', 'seasoning',
+  'garlic', 'ginger', 'chili', 'chilli', 'cumin', 'coriander', 'paprika',
+  'turmeric', 'oregano', 'thyme', 'basil', 'bay', 'herb', 'mustard',
+  'stock', 'broth', 'bouillon', 'sugar', 'honey', 'syrup',
+];
+
+function isPantryItem(name) {
+  const n = name.toLowerCase();
+  return PANTRY_KEYWORDS.some(k => n.includes(k));
+}
+
+function togglePantry() {
+  omitPantry = !omitPantry;
+  localStorage.setItem('omitPantry', JSON.stringify(omitPantry));
+  updatePantryToggle();
+  renderGrocery();
+}
+
+function updatePantryToggle() {
+  const btn = document.getElementById('pantry-toggle');
+  if (!btn) return;
+  if (omitPantry) {
+    btn.textContent = 'Show oils & spices';
+    btn.style.background = 'var(--sage)';
+    btn.style.color = 'white';
+    btn.style.borderColor = 'var(--sage)';
+  } else {
+    btn.textContent = 'Hide oils & spices';
+    btn.style.background = 'var(--warm-white)';
+    btn.style.color = 'var(--ink-muted)';
+    btn.style.borderColor = 'var(--border)';
+  }
+}
 
 async function loadGrocery() {
   updateWeekLabels();
@@ -1006,19 +1043,25 @@ function fmtGrams(g) {
 }
 
 function renderGrocery() {
+  updatePantryToggle();
   const el = document.getElementById('grocery-content');
   if (!groceryItems.length) {
     el.innerHTML = `<div class="empty-state"><p>Nothing planned yet</p><small>Add meals in the planner to generate your list.</small></div>`;
     return;
   }
 
-  const total = groceryItems.length;
-  const done = groceryItems.filter(i => checkedItems.has(i.name)).length;
-  const progressHTML = `<p style="font-size:13px;color:var(--ink-muted);margin-bottom:1rem;">${total} ingredient${total !== 1 ? 's' : ''} · ${done} checked off</p>`;
+  const visible = omitPantry ? groceryItems.filter(i => !isPantryItem(i.name)) : groceryItems;
+  const hidden = groceryItems.length - visible.length;
+  const done = visible.filter(i => checkedItems.has(i.name)).length;
+
+  const hiddenNote = hidden > 0
+    ? `<span style="margin-left:8px;cursor:pointer;text-decoration:underline;" onclick="togglePantry()">${hidden} pantry item${hidden !== 1 ? 's' : ''} hidden</span>`
+    : '';
+  const progressHTML = `<p style="font-size:13px;color:var(--ink-muted);margin-bottom:1rem;">${visible.length} ingredient${visible.length !== 1 ? 's' : ''} · ${done} checked off${hiddenNote}</p>`;
 
   el.innerHTML = progressHTML + `
     <div class="card" style="padding:1.25rem 1.5rem;">
-      ${groceryItems.map(item => {
+      ${visible.map(item => {
         const checked = checkedItems.has(item.name);
         const tags = item.recipes.map(r => `<span class="grocery-recipe-tag">${r}</span>`).join('');
         return `<div class="grocery-item ${checked ? 'checked-item' : ''}">
@@ -1038,7 +1081,8 @@ function toggleCheck(name) {
   renderGrocery();
 }
 function copyGroceryList() {
-  const text = groceryItems.map(i => `${i.name}: ${fmtGrams(i.grams)}`).join('\n');
+  const items = omitPantry ? groceryItems.filter(i => !isPantryItem(i.name)) : groceryItems;
+  const text = items.map(i => `${i.name}: ${fmtGrams(i.grams)}`).join('\n');
   navigator.clipboard.writeText(text).then(() => flash('Copied to clipboard!'));
 }
 function printGroceryList() { window.print(); }
