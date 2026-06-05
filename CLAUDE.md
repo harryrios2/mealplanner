@@ -6,7 +6,10 @@ How to add recipes to Mise en Place via the backend API.
 
 ```bash
 cd /home/harry/projects/mealplanner
-python3 app.py          # runs on http://localhost:5000
+python3 app.py                                      # runs on http://localhost:5000
+
+# Claude Chef tab requires an Anthropic API key:
+ANTHROPIC_API_KEY=your-key python3 app.py
 ```
 
 ---

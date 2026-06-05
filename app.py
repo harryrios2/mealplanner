@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, jsonify
-import sqlite3, os, shutil, glob
+import sqlite3, os, shutil, glob, json, re
 from datetime import datetime
 
 app = Flask(__name__)
@@ -381,6 +381,134 @@ def recipe_macros(rid):
         totals['fat'] += row['fat_per_100g'] * f
     per_serving = {k: round(v / recipe['base_servings'], 1) for k, v in totals.items()}
     return jsonify({'per_serving': per_serving, 'total': {k: round(v, 1) for k, v in totals.items()}})
+
+# ── Claude Chef ───────────────────────────────────────────────────────────────
+
+def _extract_json(text):
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+    m = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', text, re.DOTALL)
+    if m:
+        return json.loads(m.group(1))
+    start, end = text.find('{'), text.rfind('}')
+    if start != -1 and end != -1:
+        return json.loads(text[start:end + 1])
+    raise ValueError('No JSON object found in Claude response')
+
+@app.post('/api/chef')
+def claude_chef():
+    data = request.json
+    prompt = (data or {}).get('prompt', '').strip()
+    if not prompt:
+        return jsonify({'error': 'prompt is required'}), 400
+
+    api_key = os.environ.get('ANTHROPIC_API_KEY')
+    if not api_key:
+        return jsonify({'error': 'ANTHROPIC_API_KEY environment variable is not set'}), 503
+
+    try:
+        import anthropic
+    except ImportError:
+        return jsonify({'error': 'anthropic package not installed — run: pip install anthropic'}), 503
+
+    db = get_db()
+
+    # Build ingredient list for context (id + name + macros)
+    defs = db.execute(
+        'SELECT id, name, calories_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g FROM ingredient_defs ORDER BY name'
+    ).fetchall()
+    ing_lines = '\n'.join(
+        f"[{r['id']}] {r['name']} — {r['calories_per_100g']} kcal, {r['protein_per_100g']}g P, {r['carbs_per_100g']}g C, {r['fat_per_100g']}g F"
+        for r in defs
+    )
+
+    chef_guide_path = os.path.join(os.path.dirname(__file__), 'CLAUDE.md')
+    chef_guide = open(chef_guide_path).read() if os.path.exists(chef_guide_path) else ''
+
+    system = f"""{chef_guide}
+
+## Available ingredients ({len(defs)} items)
+{ing_lines}
+
+## Response format
+Reply with ONLY a valid JSON object — no prose, no markdown fences:
+{{
+  "new_ingredients": [
+    {{"name": "...", "calories": 0, "protein": 0, "carbs": 0, "fat": 0}}
+  ],
+  "recipe": {{
+    "name": "...",
+    "tags": "...",
+    "notes": "...",
+    "ingredients": [
+      {{"name": "...", "grams": 0, "ingredient_def_id": 123}}
+    ]
+  }}
+}}
+
+Rules:
+- new_ingredients: only for items NOT in the database above; use accurate per-100g values.
+- For a new ingredient, set ingredient_def_id to null in recipe.ingredients — it will be resolved.
+- All grams are per single serving.
+- 1 tbsp liquid ≈ 15g, 1 tbsp paste ≈ 18g, 1 tsp ≈ 5g, 1 large egg ≈ 55g."""
+
+    try:
+        client = anthropic.Anthropic(api_key=api_key)
+        msg = client.messages.create(
+            model='claude-haiku-4-5-20251001',
+            max_tokens=2048,
+            system=system,
+            messages=[{'role': 'user', 'content': prompt}]
+        )
+        raw = msg.content[0].text.strip()
+        recipe_data = _extract_json(raw)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+    # Create any new custom ingredients first
+    name_to_id = {}
+    for ing in recipe_data.get('new_ingredients', []):
+        cur = db.execute(
+            'INSERT OR IGNORE INTO ingredient_defs (name, calories_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g, is_custom) VALUES (?,?,?,?,?,1)',
+            (ing['name'], ing.get('calories', 0), ing.get('protein', 0), ing.get('carbs', 0), ing.get('fat', 0))
+        )
+        # If name already existed, fetch the existing id
+        if cur.lastrowid:
+            name_to_id[ing['name']] = cur.lastrowid
+        else:
+            row = db.execute('SELECT id FROM ingredient_defs WHERE name = ?', (ing['name'],)).fetchone()
+            if row:
+                name_to_id[ing['name']] = row['id']
+
+    r = recipe_data.get('recipe', {})
+    cur = db.execute(
+        'INSERT INTO recipes (name, base_servings, tags, notes) VALUES (?,1,?,?)',
+        (r.get('name', 'Untitled'), r.get('tags', ''), r.get('notes', ''))
+    )
+    recipe_id = cur.lastrowid
+
+    for ing in r.get('ingredients', []):
+        def_id = ing.get('ingredient_def_id') or name_to_id.get(ing.get('name'))
+        db.execute(
+            'INSERT INTO ingredients (recipe_id, name, grams_per_base_serving, ingredient_def_id) VALUES (?,?,?,?)',
+            (recipe_id, ing['name'], ing.get('grams', 0), def_id)
+        )
+
+    db.commit()
+    backup_db()
+
+    # Return the created recipe with macros
+    recipe_row = db.execute('SELECT * FROM recipes WHERE id = ?', (recipe_id,)).fetchone()
+    ingredients = db.execute('SELECT * FROM ingredients WHERE recipe_id = ?', (recipe_id,)).fetchall()
+    macros_res = recipe_macros(recipe_id).get_json()
+
+    return jsonify({
+        'recipe': {**dict(recipe_row), 'ingredients': [dict(i) for i in ingredients]},
+        'macros': macros_res.get('per_serving'),
+        'new_ingredients': list(name_to_id.keys()),
+    }), 201
 
 # ── Frontend ──────────────────────────────────────────────────────────────────
 

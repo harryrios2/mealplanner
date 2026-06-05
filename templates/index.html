@@ -228,6 +228,10 @@ textarea { resize: vertical; min-height: 60px; }
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
         Ingredients
       </div>
+      <div class="nav-item" data-view="chef">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 2a4 4 0 014 4c0 1.5-.8 2.8-2 3.5V11h2a2 2 0 012 2v7H6v-7a2 2 0 012-2h2V9.5A4 4 0 018 6a4 4 0 014-4z"/><line x1="9" y1="15" x2="9" y2="18"/><line x1="12" y1="14" x2="12" y2="18"/><line x1="15" y1="15" x2="15" y2="18"/></svg>
+        Claude Chef
+      </div>
     </nav>
     <div class="sidebar-footer">
       All data stored locally.<br>
@@ -312,6 +316,39 @@ textarea { resize: vertical; min-height: 60px; }
           </thead>
           <tbody id="ingdef-tbody"></tbody>
         </table>
+      </div>
+    </div>
+
+    <!-- Claude Chef View -->
+    <div class="view" id="view-chef">
+      <div class="view-header">
+        <h2>Claude Chef</h2>
+        <p>Describe a dish and Claude will build the recipe, match ingredients, and add it to your book.</p>
+      </div>
+      <div class="card" style="padding:1.5rem;max-width:640px;">
+        <div class="form-group" style="margin-bottom:1rem;">
+          <label>What would you like to cook?</label>
+          <textarea id="chef-prompt" rows="3" placeholder="e.g. A spicy Thai green curry with chicken and jasmine rice&#10;e.g. Simple Greek salad with feta&#10;e.g. High-protein overnight oats with banana and peanut butter" style="resize:vertical;"></textarea>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <button class="btn btn-primary" onclick="submitChefPrompt()" id="chef-btn">Generate recipe</button>
+          <span id="chef-status" style="font-size:13px;color:var(--ink-muted);"></span>
+        </div>
+      </div>
+
+      <div id="chef-result" style="margin-top:1.5rem;max-width:640px;display:none;">
+        <div class="card" style="padding:1.5rem;">
+          <div style="display:flex;align-items:start;justify-content:space-between;gap:12px;margin-bottom:1rem;">
+            <div>
+              <h3 id="chef-recipe-name" style="font-family:var(--font-display);font-size:1.2rem;font-weight:600;margin-bottom:4px;"></h3>
+              <div id="chef-recipe-tags" class="tags"></div>
+            </div>
+            <div class="macro-pills" id="chef-macro-pills" style="flex-shrink:0;"></div>
+          </div>
+          <div id="chef-ingredients" style="margin-bottom:1rem;"></div>
+          <p id="chef-notes" style="font-size:13px;color:var(--ink-muted);font-style:italic;"></p>
+          <div id="chef-new-ings" style="margin-top:0.75rem;"></div>
+        </div>
       </div>
     </div>
 
@@ -1005,6 +1042,84 @@ function copyGroceryList() {
   navigator.clipboard.writeText(text).then(() => flash('Copied to clipboard!'));
 }
 function printGroceryList() { window.print(); }
+
+// ── Claude Chef ───────────────────────────────────────────────────────────────
+async function submitChefPrompt() {
+  const prompt = document.getElementById('chef-prompt').value.trim();
+  if (!prompt) { flash('Please describe a recipe first.'); return; }
+
+  const btn = document.getElementById('chef-btn');
+  const status = document.getElementById('chef-status');
+  const result = document.getElementById('chef-result');
+
+  btn.disabled = true;
+  btn.textContent = 'Cooking…';
+  status.textContent = 'Claude is building your recipe…';
+  result.style.display = 'none';
+
+  try {
+    const res = await apiFetch('/api/chef', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ prompt })
+    });
+    const data = await res.json();
+    renderChefResult(data);
+    await loadIngredientDefs();
+    await loadRecipes();
+    status.textContent = 'Recipe added to your book!';
+  } catch (e) {
+    const msg = e.message.includes('ANTHROPIC_API_KEY')
+      ? 'API key not set — start the server with: ANTHROPIC_API_KEY=your-key python3 app.py'
+      : e.message;
+    flashError(msg);
+    status.textContent = '';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Generate recipe';
+  }
+}
+
+function renderChefResult(data) {
+  const r = data.recipe;
+  const m = data.macros;
+  const result = document.getElementById('chef-result');
+
+  document.getElementById('chef-recipe-name').textContent = r.name;
+
+  const tagsEl = document.getElementById('chef-recipe-tags');
+  tagsEl.innerHTML = r.tags
+    ? r.tags.split(',').map(t => `<span class="tag">${t.trim()}</span>`).join('')
+    : '';
+
+  const pillsEl = document.getElementById('chef-macro-pills');
+  if (m && m.calories > 0) {
+    pillsEl.innerHTML = `
+      <span class="macro-pill cal">${Math.round(m.calories)} kcal</span>
+      <span class="macro-pill pro">${m.protein}g P</span>
+      <span class="macro-pill carb">${m.carbs}g C</span>
+      <span class="macro-pill fat">${m.fat}g F</span>`;
+  } else {
+    pillsEl.innerHTML = '';
+  }
+
+  const ingsEl = document.getElementById('chef-ingredients');
+  ingsEl.innerHTML = r.ingredients.map(i =>
+    `<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);font-size:14px;">
+       <span>${i.name}</span>
+       <span style="color:var(--ink-muted);font-weight:500;">${fmtGrams(i.grams_per_base_serving)}</span>
+     </div>`
+  ).join('');
+
+  document.getElementById('chef-notes').textContent = r.notes || '';
+
+  const newEl = document.getElementById('chef-new-ings');
+  newEl.innerHTML = data.new_ingredients && data.new_ingredients.length
+    ? `<p style="font-size:12px;color:var(--ink-muted);">New ingredients created: ${data.new_ingredients.join(', ')}</p>`
+    : '';
+
+  result.style.display = 'block';
+}
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 async function init() {
