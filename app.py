@@ -322,12 +322,10 @@ def delete_plan_entry(pid):
 def get_grocery(week_start):
     db = get_db()
     rows = db.execute(
-        '''SELECT i.name, i.grams_per_base_serving, mp.servings, r.base_servings,
-                  d.calories_per_100g, d.protein_per_100g, d.carbs_per_100g, d.fat_per_100g
+        '''SELECT i.name, i.grams_per_base_serving, mp.servings, r.base_servings, r.name as recipe_name
            FROM meal_plan mp
            JOIN recipes r ON r.id = mp.recipe_id
            JOIN ingredients i ON i.recipe_id = r.id
-           LEFT JOIN ingredient_defs d ON d.id = i.ingredient_def_id
            WHERE mp.week_start = ?''',
         (week_start,)
     ).fetchall()
@@ -338,25 +336,14 @@ def get_grocery(week_start):
         grams = row['grams_per_base_serving'] * scale
         key = row['name'].strip().lower()
         if key not in totals:
-            totals[key] = {'name': row['name'].strip(), 'grams': 0, 'calories': 0, 'protein': 0, 'carbs': 0, 'fat': 0, 'has_macros': False}
+            totals[key] = {'name': row['name'].strip(), 'grams': 0, 'recipes': set()}
         totals[key]['grams'] += grams
-        if row['calories_per_100g'] is not None:
-            factor = grams / 100
-            totals[key]['calories'] += row['calories_per_100g'] * factor
-            totals[key]['protein'] += row['protein_per_100g'] * factor
-            totals[key]['carbs'] += row['carbs_per_100g'] * factor
-            totals[key]['fat'] += row['fat_per_100g'] * factor
-            totals[key]['has_macros'] = True
+        totals[key]['recipes'].add(row['recipe_name'])
 
-    result = []
-    for _, v in sorted(totals.items()):
-        item = {'name': v['name'], 'grams': round(v['grams'], 1), 'has_macros': v['has_macros']}
-        if v['has_macros']:
-            item['calories'] = round(v['calories'])
-            item['protein'] = round(v['protein'], 1)
-            item['carbs'] = round(v['carbs'], 1)
-            item['fat'] = round(v['fat'], 1)
-        result.append(item)
+    result = [
+        {'name': v['name'], 'grams': round(v['grams'], 1), 'recipes': sorted(v['recipes'])}
+        for _, v in sorted(totals.items())
+    ]
     return jsonify(result)
 
 # ── Recipe macros ─────────────────────────────────────────────────────────────
