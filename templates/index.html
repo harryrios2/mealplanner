@@ -319,18 +319,12 @@ textarea { resize: vertical; min-height: 60px; }
         <label>Recipe name</label>
         <input type="text" id="r-name" placeholder="e.g. Pasta carbonara">
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-        <div class="form-group">
-          <label>Base servings</label>
-          <input type="number" id="r-servings" value="4" min="1" max="99">
-        </div>
-        <div class="form-group">
-          <label>Tags (comma-separated)</label>
-          <input type="text" id="r-tags" placeholder="Italian, pasta">
-        </div>
+      <div class="form-group">
+        <label>Tags (comma-separated)</label>
+        <input type="text" id="r-tags" placeholder="Italian, pasta">
       </div>
       <div class="form-group">
-        <label>Ingredients <span style="font-weight:300;color:var(--ink-faint)">(grams per base serving)</span></label>
+        <label>Ingredients <span style="font-weight:300;color:var(--ink-faint)">(grams per serving)</span></label>
         <div id="ing-list"></div>
         <button class="btn btn-secondary btn-sm" style="margin-top:6px;" onclick="addIngredientRow()">+ Add ingredient</button>
       </div>
@@ -635,8 +629,7 @@ function renderRecipes() {
       </div>
       <h3>${r.name}</h3>
       <div class="recipe-meta">
-        <span>🍽 ${r.base_servings} servings</span>
-        <span>📦 ${r.ingredients.length} ingredients</span>
+        <span>📦 ${r.ingredients.length} ingredient${r.ingredients.length !== 1 ? 's' : ''}</span>
       </div>
       ${macroPills}
       ${r.tags ? `<div class="tags" style="margin-top:8px;">${r.tags.split(',').map(t => `<span class="tag">${t.trim()}</span>`).join('')}</div>` : ''}
@@ -649,7 +642,6 @@ function openRecipeModal(recipe = null) {
   document.getElementById('edit-recipe-id').value = recipe ? recipe.id : '';
   document.getElementById('recipe-modal-title').textContent = recipe ? 'Edit recipe' : 'New recipe';
   document.getElementById('r-name').value = recipe ? recipe.name : '';
-  document.getElementById('r-servings').value = recipe ? recipe.base_servings : 4;
   document.getElementById('r-tags').value = recipe ? recipe.tags : '';
   document.getElementById('r-notes').value = recipe ? recipe.notes : '';
   const list = document.getElementById('ing-list');
@@ -767,7 +759,6 @@ async function saveRecipe() {
   if (!name) { flash('Please enter a recipe name.'); return; }
   const data = {
     name,
-    base_servings: parseInt(document.getElementById('r-servings').value),
     tags: document.getElementById('r-tags').value.trim(),
     notes: document.getElementById('r-notes').value.trim(),
     ingredients
@@ -879,7 +870,7 @@ function renderPickerList(list) {
     return `<div class="picker-item" onclick="selectPickerRecipe(${r.id})" id="pi-${r.id}"
          style="${pickerState.recipe === r.id ? 'border-color:var(--sage-mid);background:var(--sage-light);' : ''}">
       <span>${r.name}</span>
-      <span class="picker-meta">${r.base_servings} srv${calStr}</span>
+      <span class="picker-meta">per serving${calStr}</span>
     </div>`;
   }).join('');
 }

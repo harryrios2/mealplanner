@@ -158,6 +158,16 @@ def migrate_db():
         if 'ingredient_def_id' not in cols:
             db.execute('ALTER TABLE ingredients ADD COLUMN ingredient_def_id INTEGER REFERENCES ingredient_defs(id) ON DELETE SET NULL')
             db.commit()
+        # Normalise all recipes to base_servings=1 (divide ingredient grams accordingly)
+        db.execute('''
+            UPDATE ingredients
+            SET grams_per_base_serving = ROUND(grams_per_base_serving / (
+                SELECT base_servings FROM recipes WHERE recipes.id = ingredients.recipe_id
+            ), 2)
+            WHERE (SELECT base_servings FROM recipes WHERE recipes.id = ingredients.recipe_id) > 1
+        ''')
+        db.execute('UPDATE recipes SET base_servings = 1 WHERE base_servings != 1')
+        db.commit()
 
 init_db()
 migrate_db()
@@ -186,7 +196,7 @@ def create_recipe():
     db = get_db()
     cur = db.execute(
         'INSERT INTO recipes (name, base_servings, tags, notes) VALUES (?,?,?,?)',
-        (data['name'], max(1, int(data.get('base_servings', 4))), data.get('tags', ''), data.get('notes', ''))
+        (data['name'], 1, data.get('tags', ''), data.get('notes', ''))
     )
     recipe_id = cur.lastrowid
     for ing in data.get('ingredients', []):
@@ -207,7 +217,7 @@ def update_recipe(rid):
     db = get_db()
     db.execute(
         'UPDATE recipes SET name=?, base_servings=?, tags=?, notes=? WHERE id=?',
-        (data['name'], max(1, int(data.get('base_servings', 4))), data.get('tags', ''), data.get('notes', ''), rid)
+        (data['name'], 1, data.get('tags', ''), data.get('notes', ''), rid)
     )
     db.execute('DELETE FROM ingredients WHERE recipe_id = ?', (rid,))
     for ing in data.get('ingredients', []):
