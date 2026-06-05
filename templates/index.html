@@ -86,10 +86,10 @@ body { font-family: var(--font-body); background: var(--cream); color: var(--ink
 .add-card { border: 1.5px dashed var(--border); border-radius: var(--radius-lg); padding: 1.1rem 1.25rem; cursor: pointer; display: flex; align-items: center; gap: 10px; color: var(--ink-muted); font-size: 14px; transition: all var(--transition); }
 .add-card:hover { border-color: var(--sage-mid); color: var(--sage); background: var(--sage-light); }
 
-.tag-filter { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
-.tag-filter-pill { font-size: 12px; font-weight: 500; padding: 4px 12px; border-radius: 99px; border: 1.5px solid var(--border); background: var(--warm-white); color: var(--ink-muted); cursor: pointer; transition: all var(--transition); user-select: none; }
-.tag-filter-pill:hover { border-color: var(--sage-mid); color: var(--sage); }
-.tag-filter-pill.active { background: var(--sage); border-color: var(--sage); color: white; }
+.recipe-filters { display: flex; gap: 8px; align-items: center; flex: 1; flex-wrap: wrap; }
+.recipe-filters input[type=text] { width: 200px; }
+.recipe-filters select { padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius); font-family: var(--font-body); font-size: 14px; background: var(--cream); color: var(--ink); outline: none; cursor: pointer; transition: border-color var(--transition); }
+.recipe-filters select:focus { border-color: var(--sage-mid); background: var(--warm-white); }
 
 /* Planner */
 .day-grid { display: flex; flex-direction: column; gap: 10px; }
@@ -246,7 +246,12 @@ textarea { resize: vertical; min-height: 60px; }
       </div>
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:1.25rem;">
         <button class="btn btn-primary" onclick="openRecipeModal()">+ Add recipe</button>
-        <div class="tag-filter" id="tag-filter"></div>
+        <div class="recipe-filters">
+          <input type="text" id="recipe-search" placeholder="Search recipes…" oninput="renderRecipes()" style="margin:0;">
+          <select id="recipe-tag-select" onchange="renderRecipes()" style="margin:0;">
+            <option value="">All tags</option>
+          </select>
+        </div>
       </div>
       <div class="recipe-grid" id="recipe-grid"></div>
     </div>
@@ -419,7 +424,6 @@ textarea { resize: vertical; min-height: 60px; }
 <script>
 // ── State ─────────────────────────────────────────────────────────────────────
 let recipes = [];
-let activeTagFilter = null;
 let ingredientDefs = [];
 let planEntries = [];
 let groceryItems = [];
@@ -600,7 +604,7 @@ async function loadRecipes() {
     const res = await apiFetch('/api/recipes');
     recipes = await res.json();
     await loadAllRecipeMacros();
-    renderTagFilter();
+    renderTagDropdown();
     renderRecipes();
   } catch (e) { flashError(e.message); }
 }
@@ -614,34 +618,32 @@ async function loadAllRecipeMacros() {
   }));
 }
 
-function renderTagFilter() {
+function renderTagDropdown() {
   const allTags = [...new Set(
     recipes.flatMap(r => r.tags ? r.tags.split(',').map(t => t.trim()).filter(Boolean) : [])
   )].sort();
-  const el = document.getElementById('tag-filter');
-  if (!allTags.length) { el.innerHTML = ''; return; }
-  el.innerHTML = allTags.map(t => `
-    <span class="tag-filter-pill ${activeTagFilter === t ? 'active' : ''}" onclick="setTagFilter(${JSON.stringify(t)})">${t}</span>
-  `).join('');
-}
-
-function setTagFilter(tag) {
-  activeTagFilter = activeTagFilter === tag ? null : tag;
-  renderTagFilter();
-  renderRecipes();
+  const sel = document.getElementById('recipe-tag-select');
+  const current = sel.value;
+  sel.innerHTML = '<option value="">All tags</option>' +
+    allTags.map(t => `<option value="${t}" ${t === current ? 'selected' : ''}>${t}</option>`).join('');
 }
 
 function renderRecipes() {
   const grid = document.getElementById('recipe-grid');
-  const visible = activeTagFilter
-    ? recipes.filter(r => r.tags && r.tags.split(',').map(t => t.trim()).includes(activeTagFilter))
-    : recipes;
+  const q = (document.getElementById('recipe-search').value || '').toLowerCase().trim();
+  const tag = document.getElementById('recipe-tag-select').value;
+  const visible = recipes.filter(r => {
+    const matchesSearch = !q || r.name.toLowerCase().includes(q) ||
+      (r.tags && r.tags.toLowerCase().includes(q));
+    const matchesTag = !tag || (r.tags && r.tags.split(',').map(t => t.trim()).includes(tag));
+    return matchesSearch && matchesTag;
+  });
   if (!recipes.length) {
     grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;"><p>No recipes yet</p><small>Add your first recipe to get started.</small></div>`;
     return;
   }
   if (!visible.length) {
-    grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;"><p>No recipes tagged "${activeTagFilter}"</p><small>Try a different tag or <span style="cursor:pointer;text-decoration:underline;" onclick="setTagFilter(null)">clear the filter</span>.</small></div>`;
+    grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;"><p>No recipes match</p><small>Try clearing the search or tag filter.</small></div>`;
     return;
   }
   grid.innerHTML = visible.map(r => {
