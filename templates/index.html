@@ -1052,10 +1052,11 @@ function renderPlanner() {
 
 function mealEntryHTML(e) {
   const m = recipeMacros[e.recipe_id];
-  const calsPerSrv = m && m.per_serving ? Math.round(m.per_serving.calories) : null;
+  const s = m && m.per_serving ? m.per_serving : null;
+  const macroStr = s ? `${Math.round(s.calories)} kcal · ${s.protein}g P · ${s.carbs}g C · ${s.fat}g F` : null;
   return `<div class="meal-entry" id="meal-${e.id}">
     <span class="meal-name">${e.recipe_name}</span>
-    ${calsPerSrv ? `<span class="meal-cals">${calsPerSrv} kcal/srv</span>` : ''}
+    ${macroStr ? `<span class="meal-cals">${macroStr}</span>` : ''}
     <div class="serving-control">
       <button onclick="adjServings(${e.id}, -1)">−</button>
       <span class="serving-val" id="sv-${e.id}">${e.servings}</span>
