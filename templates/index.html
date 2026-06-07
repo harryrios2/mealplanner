@@ -69,7 +69,6 @@ body { font-family: var(--font-body); background: var(--cream); color: var(--ink
 .recipe-card { background: var(--warm-white); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.1rem 1.25rem; cursor: pointer; transition: all var(--transition); box-shadow: var(--shadow); position: relative; }
 .recipe-card:hover { box-shadow: var(--shadow-lifted); transform: translateY(-1px); border-color: var(--sage-mid); }
 .recipe-card h3 { font-family: var(--font-display); font-size: 1.05rem; font-weight: 600; color: var(--ink); margin-bottom: 6px; }
-.recipe-emoji-tile { font-size: 2.4rem; line-height: 1; margin-bottom: 0.65rem; display: block; }
 .recipe-meta { font-size: 12px; color: var(--ink-muted); display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
 .macro-pills { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 8px; }
 .macro-pill { font-size: 11px; font-weight: 500; padding: 2px 7px; border-radius: 99px; background: var(--terracotta-light); color: var(--terracotta); }
@@ -789,10 +788,9 @@ function renderRecipes() {
         <button class="icon-btn" onclick="editRecipe(${r.id})">✎</button>
         <button class="icon-btn danger" onclick="deleteRecipe(${r.id})">✕</button>
       </div>
-      <span class="recipe-emoji-tile">${recipeEmoji(r)}</span>
       <h3>${r.name}</h3>
       <div class="recipe-meta">
-        <span>📦 ${r.ingredients.length} ingredient${r.ingredients.length !== 1 ? 's' : ''}</span>
+        <span>${recipeEmoji(r)} ${r.ingredients.length} ingredient${r.ingredients.length !== 1 ? 's' : ''}</span>
       </div>
       ${macroPills}
       ${r.tags ? `<div class="tags" style="margin-top:8px;">${r.tags.split(',').map(t => `<span class="tag">${t.trim()}</span>`).join('')}</div>` : ''}
