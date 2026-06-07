@@ -122,7 +122,11 @@ body { font-family: var(--font-body); background: var(--cream); color: var(--ink
 .grocery-recipe-tags { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 3px; }
 .grocery-recipe-tag { font-size: 11px; color: var(--ink-muted); background: var(--cream); border: 1px solid var(--border); border-radius: 99px; padding: 1px 7px; white-space: nowrap; }
 .grocery-qty { font-size: 13px; font-weight: 500; color: var(--ink-muted); white-space: nowrap; margin-left: auto; }
-.grocery-actions { display: flex; gap: 8px; margin-bottom: 1.5rem; flex-wrap: wrap; align-items: flex-start; }
+.grocery-actions { display: flex; gap: 8px; margin-bottom: 0.75rem; flex-wrap: wrap; align-items: flex-start; }
+.grocery-filters { display: flex; gap: 6px; align-items: center; margin-bottom: 1.25rem; }
+.filter-toggle { font-family: var(--font-body); font-size: 12px; font-weight: 500; padding: 3px 10px; border: 1px solid var(--border); border-radius: 99px; background: var(--warm-white); color: var(--ink-muted); cursor: pointer; transition: all var(--transition); }
+.filter-toggle:hover { border-color: var(--sage-mid); color: var(--sage); }
+.filter-toggle.active { background: var(--sage); color: white; border-color: var(--sage); }
 .email-panel { background: var(--warm-white); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1rem 1.25rem; margin-bottom: 1.5rem; display: none; }
 .email-panel.open { display: block; }
 .email-panel p { font-size: 13px; color: var(--ink-muted); margin-bottom: 0.75rem; }
@@ -294,7 +298,11 @@ textarea { resize: vertical; min-height: 60px; }
         <button class="btn btn-secondary btn-sm" onclick="copyGroceryList()">Copy as text</button>
         <button class="btn btn-secondary btn-sm" onclick="toggleEmailPanel()">Email list</button>
         <button class="btn btn-sage btn-sm" onclick="printGroceryList()">Print</button>
-        <button class="btn btn-sm" id="pantry-toggle" onclick="togglePantry()" style="border:1px solid var(--border);background:var(--warm-white);color:var(--ink-muted);">Hide oils &amp; spices</button>
+      </div>
+      <div class="grocery-filters">
+        <span style="font-size:12px;color:var(--ink-muted);font-weight:500;letter-spacing:0.04em;text-transform:uppercase;">Hide:</span>
+        <button class="filter-toggle" id="pantry-toggle" onclick="togglePantry()">Oils &amp; spices</button>
+        <button class="filter-toggle" id="staples-toggle" onclick="toggleStaples()">Staples</button>
       </div>
       <div class="email-panel" id="email-panel">
         <p>Copy the list below, then paste it into your email — or open Gmail / Outlook directly:</p>
@@ -1007,41 +1015,41 @@ async function confirmPickedMeal() {
 
 // ── Grocery ───────────────────────────────────────────────────────────────────
 let checkedItems = new Set();
-let omitPantry = JSON.parse(localStorage.getItem('omitPantry') || 'false');
+let omitPantry  = JSON.parse(localStorage.getItem('omitPantry')  || 'false');
+let omitStaples = JSON.parse(localStorage.getItem('omitStaples') || 'false');
 
 const PANTRY_KEYWORDS = [
   'oil', 'vinegar', 'sauce', 'salt', 'pepper', 'spice', 'seasoning',
   'garlic', 'ginger', 'chili', 'chilli', 'cumin', 'coriander', 'paprika',
   'turmeric', 'oregano', 'thyme', 'basil', 'bay', 'herb', 'mustard',
-  'stock', 'broth', 'bouillon', 'sugar', 'honey', 'syrup',
+  'stock', 'broth', 'bouillon',
+];
+const STAPLES_KEYWORDS = [
+  'rice', 'flour', 'sugar', 'pasta', 'noodle', 'bread', 'oat', 'lentil',
+  'bean', 'chickpea', 'honey', 'syrup', 'cornstarch', 'starch', 'baking',
+  'yeast', 'soda', 'salt',
 ];
 
-function isPantryItem(name) {
-  const n = name.toLowerCase();
-  return PANTRY_KEYWORDS.some(k => n.includes(k));
-}
+function isPantryItem(name)  { const n = name.toLowerCase(); return PANTRY_KEYWORDS.some(k => n.includes(k)); }
+function isStaplesItem(name) { const n = name.toLowerCase(); return STAPLES_KEYWORDS.some(k => n.includes(k)); }
+function isHidden(item) { return (omitPantry && isPantryItem(item.name)) || (omitStaples && isStaplesItem(item.name)); }
 
 function togglePantry() {
   omitPantry = !omitPantry;
   localStorage.setItem('omitPantry', JSON.stringify(omitPantry));
-  updatePantryToggle();
+  updateFilterToggles();
+  renderGrocery();
+}
+function toggleStaples() {
+  omitStaples = !omitStaples;
+  localStorage.setItem('omitStaples', JSON.stringify(omitStaples));
+  updateFilterToggles();
   renderGrocery();
 }
 
-function updatePantryToggle() {
-  const btn = document.getElementById('pantry-toggle');
-  if (!btn) return;
-  if (omitPantry) {
-    btn.textContent = 'Show oils & spices';
-    btn.style.background = 'var(--sage)';
-    btn.style.color = 'white';
-    btn.style.borderColor = 'var(--sage)';
-  } else {
-    btn.textContent = 'Hide oils & spices';
-    btn.style.background = 'var(--warm-white)';
-    btn.style.color = 'var(--ink-muted)';
-    btn.style.borderColor = 'var(--border)';
-  }
+function updateFilterToggles() {
+  document.getElementById('pantry-toggle') ?.classList.toggle('active', omitPantry);
+  document.getElementById('staples-toggle')?.classList.toggle('active', omitStaples);
 }
 
 async function loadGrocery() {
@@ -1058,19 +1066,19 @@ function fmtGrams(g) {
 }
 
 function renderGrocery() {
-  updatePantryToggle();
+  updateFilterToggles();
   const el = document.getElementById('grocery-content');
   if (!groceryItems.length) {
     el.innerHTML = `<div class="empty-state"><p>Nothing planned yet</p><small>Add meals in the planner to generate your list.</small></div>`;
     return;
   }
 
-  const visible = omitPantry ? groceryItems.filter(i => !isPantryItem(i.name)) : groceryItems;
+  const visible = groceryItems.filter(i => !isHidden(i));
   const hidden = groceryItems.length - visible.length;
   const done = visible.filter(i => checkedItems.has(i.name)).length;
 
   const hiddenNote = hidden > 0
-    ? `<span style="margin-left:8px;cursor:pointer;text-decoration:underline;" onclick="togglePantry()">${hidden} pantry item${hidden !== 1 ? 's' : ''} hidden</span>`
+    ? `<span style="margin-left:8px;font-size:12px;color:var(--ink-faint);">${hidden} item${hidden !== 1 ? 's' : ''} hidden by filters</span>`
     : '';
   const progressHTML = `<p style="font-size:13px;color:var(--ink-muted);margin-bottom:1rem;">${visible.length} ingredient${visible.length !== 1 ? 's' : ''} · ${done} checked off${hiddenNote}</p>`;
 
@@ -1096,7 +1104,7 @@ function toggleCheck(name) {
   renderGrocery();
 }
 function copyGroceryList() {
-  const items = omitPantry ? groceryItems.filter(i => !isPantryItem(i.name)) : groceryItems;
+  const items = groceryItems.filter(i => !isHidden(i));
   const text = items.map(i => `${i.name}: ${fmtGrams(i.grams)}`).join('\n');
   navigator.clipboard.writeText(text).then(() => flash('Copied to clipboard!'));
 }
@@ -1104,7 +1112,7 @@ function toggleEmailPanel() {
   const panel = document.getElementById('email-panel');
   const isOpen = panel.classList.toggle('open');
   if (!isOpen) return;
-  const items = omitPantry ? groceryItems.filter(i => !isPantryItem(i.name)) : groceryItems;
+  const items = groceryItems.filter(i => !isHidden(i));
   if (!items.length) { panel.classList.remove('open'); flash('Nothing to email yet.'); return; }
   const subject = `Grocery list — w/c ${currentWeekStart}`;
   const body = items.map(i => `${i.name}: ${fmtGrams(i.grams)}`).join('\n');
