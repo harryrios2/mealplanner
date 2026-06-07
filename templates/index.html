@@ -507,10 +507,9 @@ textarea { resize: vertical; min-height: 60px; }
       <div class="recipe-picker" id="recipe-picker-list"></div>
       <div class="serving-picker">
         <label>Servings:</label>
-        <button onclick="adjPickerServ(-1)" style="width:28px;height:28px;border:1px solid var(--border);border-radius:4px;background:var(--cream);cursor:pointer;font-size:16px;">−</button>
-        <span id="picker-servings" style="font-weight:500;min-width:24px;text-align:center;">2</span>
-        <button onclick="adjPickerServ(1)" style="width:28px;height:28px;border:1px solid var(--border);border-radius:4px;background:var(--cream);cursor:pointer;font-size:16px;">+</button>
-        <span style="font-size:12px;color:var(--ink-muted);">servings</span>
+        <input type="number" id="picker-servings" min="1" max="20" value="2"
+          style="width:60px;padding:5px 8px;border:1px solid var(--border);border-radius:var(--radius);font-family:var(--font-body);font-size:14px;font-weight:500;text-align:center;"
+          oninput="pickerState.servings = Math.max(1, parseInt(this.value) || 1)">
       </div>
     </div>
     <div class="modal-footer">
@@ -1092,7 +1091,7 @@ async function removeMeal(id) {
 function openPicker(day) {
   pickerState = { day, slot: 'dinner', recipe: null, servings: 2 };
   document.getElementById('picker-search').value = '';
-  document.getElementById('picker-servings').textContent = 2;
+  document.getElementById('picker-servings').value = 2;
   renderPickerList(recipes);
   document.getElementById('picker-modal').classList.add('open');
 }
@@ -1120,14 +1119,14 @@ function selectPickerRecipe(id) {
 }
 
 function filterPicker(q) { renderPickerList(recipes.filter(r => r.name.toLowerCase().includes(q.toLowerCase()))); }
-function adjPickerServ(delta) { pickerState.servings = Math.max(1, pickerState.servings + delta); document.getElementById('picker-servings').textContent = pickerState.servings; }
+function adjPickerServ(delta) { const el = document.getElementById('picker-servings'); el.value = pickerState.servings = Math.max(1, pickerState.servings + delta); }
 
 async function confirmPickedMeal() {
   if (!pickerState.recipe) { flash('Please select a recipe.'); return; }
   try {
     await apiFetch('/api/plan', {
       method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ week_start: fmt(currentWeekStart), day_of_week: pickerState.day, meal_slot: pickerState.slot, recipe_id: pickerState.recipe, servings: pickerState.servings })
+      body: JSON.stringify({ week_start: fmt(currentWeekStart), day_of_week: pickerState.day, meal_slot: pickerState.slot, recipe_id: pickerState.recipe, servings: Math.max(1, parseInt(document.getElementById('picker-servings').value) || 1) })
     });
   } catch (e) { flashError(e.message); return; }
   closePicker();
