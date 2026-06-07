@@ -261,9 +261,22 @@ textarea { resize: vertical; min-height: 60px; }
         <button class="btn btn-primary" onclick="openRecipeModal()">+ Add recipe</button>
         <div class="recipe-filters">
           <input type="text" id="recipe-search" placeholder="Search recipes…" oninput="renderRecipes()" style="margin:0;">
-          <select id="recipe-tag-select" onchange="renderRecipes()" style="margin:0;">
-            <option value="">All tags</option>
+          <select id="filter-cuisine" onchange="renderRecipes()" style="margin:0;">
+            <option value="">All cuisines</option>
+            <option>Chinese</option><option>Japanese</option><option>Korean</option>
+            <option>Thai</option><option>Vietnamese</option><option>Indian</option>
+            <option>Italian</option><option>French</option><option>Mediterranean</option>
+            <option>Mexican</option><option>Peruvian</option><option>American</option>
+            <option>Middle Eastern</option>
           </select>
+          <select id="filter-ingredient" onchange="renderRecipes()" style="margin:0;">
+            <option value="">All ingredients</option>
+            <option>Chicken</option><option>Beef</option><option>Pork</option>
+            <option>Lamb</option><option>Fish</option><option>Seafood</option>
+            <option>Egg</option><option>Tofu</option><option>Vegetarian</option><option>Vegan</option>
+          </select>
+          <button class="filter-toggle" id="filter-quick" onclick="toggleRecipeFilter('quick')">Quick</button>
+          <button class="filter-toggle" id="filter-highprotein" onclick="toggleRecipeFilter('high-protein')">High-protein</button>
         </div>
       </div>
       <div class="recipe-grid" id="recipe-grid"></div>
@@ -393,8 +406,35 @@ textarea { resize: vertical; min-height: 60px; }
         <input type="text" id="r-name" placeholder="e.g. Pasta carbonara">
       </div>
       <div class="form-group">
-        <label>Tags (comma-separated)</label>
-        <input type="text" id="r-tags" placeholder="Italian, pasta">
+        <label>Cuisine</label>
+        <select id="r-tag-cuisine">
+          <option value="">— none —</option>
+          <option>Chinese</option><option>Japanese</option><option>Korean</option>
+          <option>Thai</option><option>Vietnamese</option><option>Indian</option>
+          <option>Italian</option><option>French</option><option>Mediterranean</option>
+          <option>Mexican</option><option>Peruvian</option><option>American</option>
+          <option>Middle Eastern</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Main ingredient</label>
+        <select id="r-tag-ingredient">
+          <option value="">— none —</option>
+          <option>Chicken</option><option>Beef</option><option>Pork</option>
+          <option>Lamb</option><option>Fish</option><option>Seafood</option>
+          <option>Egg</option><option>Tofu</option><option>Vegetarian</option><option>Vegan</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Flags</label>
+        <div style="display:flex;gap:16px;margin-top:4px;">
+          <label style="display:flex;align-items:center;gap:6px;font-weight:400;cursor:pointer;">
+            <input type="checkbox" id="r-tag-quick"> Quick
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;font-weight:400;cursor:pointer;">
+            <input type="checkbox" id="r-tag-highprotein"> High-protein
+          </label>
+        </div>
       </div>
       <div class="form-group">
         <label>Ingredients <span style="font-weight:300;color:var(--ink-faint)">(grams per serving)</span></label>
@@ -665,7 +705,6 @@ async function loadRecipes() {
     const res = await apiFetch('/api/recipes');
     recipes = await res.json();
     await loadAllRecipeMacros();
-    renderTagDropdown();
     renderRecipes();
   } catch (e) { flashError(e.message); }
 }
@@ -679,14 +718,13 @@ async function loadAllRecipeMacros() {
   }));
 }
 
-function renderTagDropdown() {
-  const allTags = [...new Set(
-    recipes.flatMap(r => r.tags ? r.tags.split(',').map(t => t.trim()).filter(Boolean) : [])
-  )].sort();
-  const sel = document.getElementById('recipe-tag-select');
-  const current = sel.value;
-  sel.innerHTML = '<option value="">All tags</option>' +
-    allTags.map(t => `<option value="${t}" ${t === current ? 'selected' : ''}>${t}</option>`).join('');
+const recipeFilterFlags = new Set();
+function toggleRecipeFilter(flag) {
+  if (recipeFilterFlags.has(flag)) recipeFilterFlags.delete(flag);
+  else recipeFilterFlags.add(flag);
+  document.getElementById('filter-quick')      .classList.toggle('active', recipeFilterFlags.has('quick'));
+  document.getElementById('filter-highprotein').classList.toggle('active', recipeFilterFlags.has('high-protein'));
+  renderRecipes();
 }
 
 const EMOJI_MAP = [
@@ -756,13 +794,16 @@ function recipeEmoji(recipe) {
 
 function renderRecipes() {
   const grid = document.getElementById('recipe-grid');
-  const q = (document.getElementById('recipe-search').value || '').toLowerCase().trim();
-  const tag = document.getElementById('recipe-tag-select').value;
+  const q        = (document.getElementById('recipe-search').value || '').toLowerCase().trim();
+  const cuisine  = document.getElementById('filter-cuisine').value.toLowerCase();
+  const ingred   = document.getElementById('filter-ingredient').value.toLowerCase();
   const visible = recipes.filter(r => {
-    const matchesSearch = !q || r.name.toLowerCase().includes(q) ||
-      (r.tags && r.tags.toLowerCase().includes(q));
-    const matchesTag = !tag || (r.tags && r.tags.split(',').map(t => t.trim()).includes(tag));
-    return matchesSearch && matchesTag;
+    const tags = (r.tags || '').toLowerCase();
+    if (q && !r.name.toLowerCase().includes(q) && !tags.includes(q)) return false;
+    if (cuisine && !tags.includes(cuisine)) return false;
+    if (ingred  && !tags.includes(ingred))  return false;
+    for (const flag of recipeFilterFlags) if (!tags.includes(flag)) return false;
+    return true;
   });
   if (!recipes.length) {
     grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;"><p>No recipes yet</p><small>Add your first recipe to get started.</small></div>`;
@@ -803,8 +844,17 @@ function openRecipeModal(recipe = null) {
   document.getElementById('edit-recipe-id').value = recipe ? recipe.id : '';
   document.getElementById('recipe-modal-title').textContent = recipe ? 'Edit recipe' : 'New recipe';
   document.getElementById('r-name').value = recipe ? recipe.name : '';
-  document.getElementById('r-tags').value = recipe ? recipe.tags : '';
   document.getElementById('r-notes').value = recipe ? recipe.notes : '';
+  // Parse existing tags back into structured inputs
+  const existingTags = (recipe?.tags || '').toLowerCase().split(',').map(t => t.trim());
+  const CUISINES = ['chinese','japanese','korean','thai','vietnamese','indian','italian','french','mediterranean','mexican','peruvian','american','middle eastern'];
+  const INGREDIENTS = ['chicken','beef','pork','lamb','fish','seafood','egg','tofu','vegetarian','vegan'];
+  const cuisineMatch = CUISINES.find(c => existingTags.includes(c)) || '';
+  const ingredMatch  = INGREDIENTS.find(i => existingTags.includes(i)) || '';
+  document.getElementById('r-tag-cuisine').value    = cuisineMatch ? cuisineMatch.charAt(0).toUpperCase() + cuisineMatch.slice(1) : '';
+  document.getElementById('r-tag-ingredient').value = ingredMatch  ? ingredMatch.charAt(0).toUpperCase()  + ingredMatch.slice(1)  : '';
+  document.getElementById('r-tag-quick').checked      = existingTags.includes('quick');
+  document.getElementById('r-tag-highprotein').checked = existingTags.includes('high-protein');
   const list = document.getElementById('ing-list');
   list.innerHTML = '';
   if (recipe && recipe.ingredients.length) {
@@ -940,7 +990,12 @@ async function saveRecipe() {
   if (!name) { flash('Please enter a recipe name.'); return; }
   const data = {
     name,
-    tags: document.getElementById('r-tags').value.trim(),
+    tags: [
+      document.getElementById('r-tag-cuisine').value,
+      document.getElementById('r-tag-ingredient').value,
+      document.getElementById('r-tag-quick').checked      ? 'Quick'        : '',
+      document.getElementById('r-tag-highprotein').checked ? 'High-protein' : '',
+    ].filter(Boolean).join(', '),
     notes: document.getElementById('r-notes').value.trim(),
     ingredients
   };
