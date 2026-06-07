@@ -508,7 +508,7 @@ textarea { resize: vertical; min-height: 60px; }
       <div class="serving-picker">
         <label>Servings:</label>
         <button onclick="adjPickerServ(-1)" style="width:28px;height:28px;border:1px solid var(--border);border-radius:4px;background:var(--cream);cursor:pointer;font-size:16px;">−</button>
-        <span id="picker-servings" style="font-weight:500;min-width:24px;text-align:center;">4</span>
+        <span id="picker-servings" style="font-weight:500;min-width:24px;text-align:center;">2</span>
         <button onclick="adjPickerServ(1)" style="width:28px;height:28px;border:1px solid var(--border);border-radius:4px;background:var(--cream);cursor:pointer;font-size:16px;">+</button>
         <span style="font-size:12px;color:var(--ink-muted);">servings</span>
       </div>
@@ -530,7 +530,7 @@ let planEntries = [];
 let groceryItems = [];
 let recipeMacros = {};
 let currentWeekStart = getMonday(new Date());
-let pickerState = { day: null, slot: null, recipe: null, servings: 4 };
+let pickerState = { day: null, slot: null, recipe: null, servings: 2 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function getMonday(d) {
@@ -1090,9 +1090,9 @@ async function removeMeal(id) {
 
 // ── Recipe Picker ─────────────────────────────────────────────────────────────
 function openPicker(day) {
-  pickerState = { day, slot: 'dinner', recipe: null, servings: 4 };
+  pickerState = { day, slot: 'dinner', recipe: null, servings: 2 };
   document.getElementById('picker-search').value = '';
-  document.getElementById('picker-servings').textContent = 4;
+  document.getElementById('picker-servings').textContent = 2;
   renderPickerList(recipes);
   document.getElementById('picker-modal').classList.add('open');
 }
