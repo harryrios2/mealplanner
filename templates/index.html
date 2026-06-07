@@ -287,6 +287,7 @@ textarea { resize: vertical; min-height: 60px; }
       </div>
       <div class="grocery-actions">
         <button class="btn btn-secondary btn-sm" onclick="copyGroceryList()">Copy as text</button>
+        <button class="btn btn-secondary btn-sm" onclick="emailGroceryList()">Email list</button>
         <button class="btn btn-sage btn-sm" onclick="printGroceryList()">Print</button>
         <button class="btn btn-sm" id="pantry-toggle" onclick="togglePantry()" style="border:1px solid var(--border);background:var(--warm-white);color:var(--ink-muted);">Hide oils &amp; spices</button>
       </div>
@@ -1084,6 +1085,13 @@ function copyGroceryList() {
   const items = omitPantry ? groceryItems.filter(i => !isPantryItem(i.name)) : groceryItems;
   const text = items.map(i => `${i.name}: ${fmtGrams(i.grams)}`).join('\n');
   navigator.clipboard.writeText(text).then(() => flash('Copied to clipboard!'));
+}
+function emailGroceryList() {
+  const items = omitPantry ? groceryItems.filter(i => !isPantryItem(i.name)) : groceryItems;
+  if (!items.length) { flash('Nothing to email yet.'); return; }
+  const subject = `Grocery list — w/c ${currentWeekStart}`;
+  const body = items.map(i => `${i.name}: ${fmtGrams(i.grams)}`).join('\n');
+  window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
 function printGroceryList() { window.print(); }
 
