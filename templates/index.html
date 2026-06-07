@@ -237,7 +237,7 @@ textarea { resize: vertical; min-height: 60px; }
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
         Ingredients
       </div>
-      <div class="nav-item" data-view="chef">
+      <div class="nav-item" data-view="chef" style="display:none;">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 2a4 4 0 014 4c0 1.5-.8 2.8-2 3.5V11h2a2 2 0 012 2v7H6v-7a2 2 0 012-2h2V9.5A4 4 0 018 6a4 4 0 014-4z"/><line x1="9" y1="15" x2="9" y2="18"/><line x1="12" y1="14" x2="12" y2="18"/><line x1="15" y1="15" x2="15" y2="18"/></svg>
         Claude Chef
       </div>
@@ -356,8 +356,8 @@ textarea { resize: vertical; min-height: 60px; }
       </div>
     </div>
 
-    <!-- Claude Chef View -->
-    <div class="view" id="view-chef">
+    <!-- Claude Chef View (hidden, not yet complete) -->
+    <div class="view" id="view-chef" style="display:none !important;">
       <div class="view-header">
         <h2>Claude Chef</h2>
         <p>Describe a dish and Claude will build the recipe, match ingredients, and add it to your book.</p>
