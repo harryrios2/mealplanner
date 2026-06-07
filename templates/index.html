@@ -122,7 +122,12 @@ body { font-family: var(--font-body); background: var(--cream); color: var(--ink
 .grocery-recipe-tags { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 3px; }
 .grocery-recipe-tag { font-size: 11px; color: var(--ink-muted); background: var(--cream); border: 1px solid var(--border); border-radius: 99px; padding: 1px 7px; white-space: nowrap; }
 .grocery-qty { font-size: 13px; font-weight: 500; color: var(--ink-muted); white-space: nowrap; margin-left: auto; }
-.grocery-actions { display: flex; gap: 8px; margin-bottom: 1.5rem; }
+.grocery-actions { display: flex; gap: 8px; margin-bottom: 1.5rem; flex-wrap: wrap; align-items: flex-start; }
+.email-panel { background: var(--warm-white); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1rem 1.25rem; margin-bottom: 1.5rem; display: none; }
+.email-panel.open { display: block; }
+.email-panel p { font-size: 13px; color: var(--ink-muted); margin-bottom: 0.75rem; }
+.email-panel textarea { width: 100%; height: 140px; font-family: var(--font-body); font-size: 13px; border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 10px; background: var(--cream); color: var(--ink); resize: vertical; margin-bottom: 0.75rem; }
+.email-panel .email-links { display: flex; gap: 8px; flex-wrap: wrap; }
 .macro-summary-bar { display: flex; gap: 16px; background: var(--warm-white); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1rem 1.5rem; margin-bottom: 1.25rem; flex-wrap: wrap; }
 .macro-summary-bar .ms-item { text-align: center; }
 .macro-summary-bar .ms-val { font-family: var(--font-display); font-size: 1.3rem; font-weight: 600; color: var(--ink); }
@@ -287,9 +292,18 @@ textarea { resize: vertical; min-height: 60px; }
       </div>
       <div class="grocery-actions">
         <button class="btn btn-secondary btn-sm" onclick="copyGroceryList()">Copy as text</button>
-        <button class="btn btn-secondary btn-sm" onclick="emailGroceryList()">Email list</button>
+        <button class="btn btn-secondary btn-sm" onclick="toggleEmailPanel()">Email list</button>
         <button class="btn btn-sage btn-sm" onclick="printGroceryList()">Print</button>
         <button class="btn btn-sm" id="pantry-toggle" onclick="togglePantry()" style="border:1px solid var(--border);background:var(--warm-white);color:var(--ink-muted);">Hide oils &amp; spices</button>
+      </div>
+      <div class="email-panel" id="email-panel">
+        <p>Copy the list below, then paste it into your email — or open Gmail / Outlook directly:</p>
+        <textarea id="email-body" readonly></textarea>
+        <div class="email-links">
+          <a id="gmail-link" href="#" target="_blank" class="btn btn-secondary btn-sm">Open in Gmail</a>
+          <a id="outlook-link" href="#" target="_blank" class="btn btn-secondary btn-sm">Open in Outlook</a>
+          <button class="btn btn-sm" onclick="copyEmailBody()" style="border:1px solid var(--border);background:var(--warm-white);color:var(--ink-muted);">Copy</button>
+        </div>
       </div>
       <div id="grocery-content"></div>
     </div>
@@ -1086,12 +1100,23 @@ function copyGroceryList() {
   const text = items.map(i => `${i.name}: ${fmtGrams(i.grams)}`).join('\n');
   navigator.clipboard.writeText(text).then(() => flash('Copied to clipboard!'));
 }
-function emailGroceryList() {
+function toggleEmailPanel() {
+  const panel = document.getElementById('email-panel');
+  const isOpen = panel.classList.toggle('open');
+  if (!isOpen) return;
   const items = omitPantry ? groceryItems.filter(i => !isPantryItem(i.name)) : groceryItems;
-  if (!items.length) { flash('Nothing to email yet.'); return; }
+  if (!items.length) { panel.classList.remove('open'); flash('Nothing to email yet.'); return; }
   const subject = `Grocery list — w/c ${currentWeekStart}`;
   const body = items.map(i => `${i.name}: ${fmtGrams(i.grams)}`).join('\n');
-  window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  document.getElementById('email-body').value = body;
+  document.getElementById('gmail-link').href =
+    `https://mail.google.com/mail/?view=cm&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  document.getElementById('outlook-link').href =
+    `https://outlook.live.com/mail/deeplink/compose?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
+function copyEmailBody() {
+  const ta = document.getElementById('email-body');
+  navigator.clipboard.writeText(ta.value).then(() => flash('Copied to clipboard!'));
 }
 function printGroceryList() { window.print(); }
 
